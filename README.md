@@ -9,7 +9,7 @@ Listener is a native macOS menu bar dictation utility built in Swift. It stays o
 - Non-activating floating overlay panel with live waveform
 - SoX-based capture to 16 kHz mono WAV
 - Local transcription via external `whisper-cli`
-- Accessibility-first text insertion with clipboard/paste fallback
+- Clipboard-based text insertion with simulated paste
 - Settings for shortcut, permissions, microphone selection, recorder setup, Whisper setup, and launch at login
 
 ## Requirements

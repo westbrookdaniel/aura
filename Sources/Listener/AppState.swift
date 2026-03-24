@@ -36,7 +36,7 @@ final class AppState: ObservableObject {
         overlayController: OverlayPanelController = OverlayPanelController(),
         audioRecorder: AudioRecorder = AudioRecorder(),
         transcriptionEngine: TranscriptionEngine = WhisperCLITranscriptionEngine(),
-        insertionService: TextInsertionService = AccessibilityTextInsertionService()
+        insertionService: TextInsertionService = PasteTextInsertionService()
     ) {
         self.preferences = preferences
         self.permissionsManager = permissionsManager

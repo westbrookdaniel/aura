@@ -128,8 +128,6 @@ struct TranscriptionResult: Equatable {
 }
 
 enum TextInsertionResult: Equatable {
-    case accessibility
-    case typingFallback
-    case pasteFallback
+    case paste
     case failed(String)
 }
