@@ -4,23 +4,22 @@ import Carbon.HIToolbox
 import Foundation
 
 protocol TextInsertionService {
-    func insert(text: String, fallbackPolicy: TextInsertionFallbackPolicy) throws -> TextInsertionResult
+    @MainActor
+    func insert(text: String) throws -> TextInsertionResult
 }
 
 struct AccessibilityTextInsertionService: TextInsertionService {
-    func insert(text: String, fallbackPolicy: TextInsertionFallbackPolicy) throws -> TextInsertionResult {
+    @MainActor
+    func insert(text: String) throws -> TextInsertionResult {
         if try insertViaAccessibility(text: text) {
             return .accessibility
-        }
-
-        guard fallbackPolicy == .accessibilityThenPaste else {
-            return .failed("The focused field does not support direct accessibility insertion.")
         }
 
         try insertViaPaste(text: text)
         return .pasteFallback
     }
 
+    @MainActor
     private func insertViaAccessibility(text: String) throws -> Bool {
         let systemWide = AXUIElementCreateSystemWide()
         var focused: CFTypeRef?
@@ -72,6 +71,7 @@ struct AccessibilityTextInsertionService: TextInsertionService {
         return true
     }
 
+    @MainActor
     private func selectedRange(for element: AXUIElement) throws -> NSRange {
         var selectedRange: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &selectedRange)
@@ -87,6 +87,7 @@ struct AccessibilityTextInsertionService: TextInsertionService {
         return NSRange(location: range.location, length: range.length)
     }
 
+    @MainActor
     private func replaceCharacters(in source: String, selectedRange: NSRange, with replacement: String) -> String {
         guard let swiftRange = Range(selectedRange, in: source) else {
             return source + replacement
@@ -94,6 +95,7 @@ struct AccessibilityTextInsertionService: TextInsertionService {
         return source.replacingCharacters(in: swiftRange, with: replacement)
     }
 
+    @MainActor
     private func isSecureElement(_ element: AXUIElement) -> Bool {
         var roleValue: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue)
@@ -110,24 +112,16 @@ struct AccessibilityTextInsertionService: TextInsertionService {
         return false
     }
 
+    @MainActor
     private func insertViaPaste(text: String) throws {
         let pasteboard = NSPasteboard.general
-        let priorItems = pasteboard.pasteboardItems
-        let previousChangeCount = pasteboard.changeCount
+        let existingStrings = pasteboard.pasteboardItems?.compactMap {
+            $0.string(forType: .string)
+        } ?? []
 
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        defer {
-            pasteboard.clearContents()
-            if let priorItems {
-                for item in priorItems {
-                    pasteboard.writeObjects([item])
-                }
-            }
-            if pasteboard.changeCount == previousChangeCount + 1 {
-                pasteboard.clearContents()
-            }
+        guard pasteboard.setString(text, forType: .string) else {
+            throw TextInsertionError.couldNotWritePasteboard
         }
 
         guard let source = CGEventSource(stateID: .combinedSessionState) else {
@@ -145,12 +139,21 @@ struct AccessibilityTextInsertionService: TextInsertionService {
         vDown?.post(tap: .cghidEventTap)
         vUp?.post(tap: .cghidEventTap)
         commandUp?.post(tap: .cghidEventTap)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            let restorePasteboard = NSPasteboard.general
+            restorePasteboard.clearContents()
+            if existingStrings.isEmpty == false {
+                restorePasteboard.writeObjects(existingStrings as [NSString])
+            }
+        }
     }
 }
 
 enum TextInsertionError: LocalizedError {
     case secureField
     case couldNotCreateEventSource
+    case couldNotWritePasteboard
 
     var errorDescription: String? {
         switch self {
@@ -158,6 +161,8 @@ enum TextInsertionError: LocalizedError {
             return "WhisperBar will not insert text into secure fields."
         case .couldNotCreateEventSource:
             return "Could not create the key event source for paste fallback."
+        case .couldNotWritePasteboard:
+            return "Could not write the dictated text to the pasteboard for fallback insertion."
         }
     }
 }

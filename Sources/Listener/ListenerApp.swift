@@ -5,13 +5,10 @@ import SwiftUI
 @main
 struct ListenerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @ObservedObject private var appState = WhisperBarAppHolder.shared.appState
-
+    
     var body: some Scene {
         Settings {
-            SettingsView()
-                .environmentObject(appState)
-                .frame(width: 560, height: 440)
+            EmptyView()
         }
     }
 }
@@ -25,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appState = WhisperBarAppHolder.shared.appState
         statusController = StatusItemController(appState: appState)
         appState.start()
+        appState.openSettingsWindow()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

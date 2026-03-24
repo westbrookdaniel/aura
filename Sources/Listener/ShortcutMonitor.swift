@@ -46,6 +46,10 @@ final class ShortcutMonitor {
     }
 
     private func handle(_ event: NSEvent) {
+        if handleFunctionKeyEvent(event) {
+            return
+        }
+
         let matches = eventMatchesShortcut(event)
 
         switch event.type {
@@ -67,6 +71,31 @@ final class ShortcutMonitor {
         }
     }
 
+    private func handleFunctionKeyEvent(_ event: NSEvent) -> Bool {
+        guard event.type == .flagsChanged else {
+            return false
+        }
+
+        guard currentShortcut.triggerKey == .fn || currentShortcut.triggerKey == .optionFn else {
+            return false
+        }
+
+        let modifiers = EventModifiers(nsFlags: event.modifierFlags, removingTriggerFor: currentShortcut.triggerKey)
+        let isFunctionDown = event.modifierFlags.contains(.function)
+
+        if isFunctionDown && modifiers == currentShortcut.modifiers {
+            if !isPressed {
+                isPressed = true
+                onPress?()
+            }
+        } else if isPressed {
+            isPressed = false
+            onRelease?()
+        }
+
+        return true
+    }
+
     private func eventMatchesShortcut(_ event: NSEvent) -> Bool {
         let modifiers = EventModifiers(nsFlags: event.modifierFlags, removingTriggerFor: currentShortcut.triggerKey)
         guard modifiers == currentShortcut.modifiers else {
@@ -75,33 +104,18 @@ final class ShortcutMonitor {
 
         switch currentShortcut.triggerKey {
         case .fn:
-            return event.modifierFlags.contains(.function)
+            return false
+        case .optionFn:
+            return false
         case .rightCommand:
             return event.keyCode == UInt16(kVK_RightCommand)
         case .rightOption:
             return event.keyCode == UInt16(kVK_RightOption)
-        case .space:
-            return event.keyCode == UInt16(kVK_Space)
-        case .grave:
-            return event.keyCode == UInt16(kVK_ANSI_Grave)
-        case .customCharacter:
-            guard let characters = event.charactersIgnoringModifiers?.lowercased(),
-                  let customCharacter = currentShortcut.customCharacter?.lowercased()
-            else {
+        case .customShortcut:
+            guard let keyCode = currentShortcut.keyCode else {
                 return false
             }
-            return characters == customCharacter
+            return event.keyCode == keyCode
         }
-    }
-}
-
-private extension EventModifiers {
-    init(nsFlags: NSEvent.ModifierFlags, removingTriggerFor trigger: ShortcutSpec.TriggerKey) {
-        var value: EventModifiers = []
-        if nsFlags.contains(.command), trigger != .rightCommand { value.insert(.command) }
-        if nsFlags.contains(.option), trigger != .rightOption { value.insert(.option) }
-        if nsFlags.contains(.control) { value.insert(.control) }
-        if nsFlags.contains(.shift) { value.insert(.shift) }
-        self = value
     }
 }

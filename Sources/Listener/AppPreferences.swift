@@ -17,10 +17,6 @@ final class AppPreferencesStore: ObservableObject {
         didSet { defaults.set(workerIdleTimeout, forKey: Keys.workerIdleTimeout) }
     }
 
-    @Published var fallbackPolicy: TextInsertionFallbackPolicy {
-        didSet { save(fallbackPolicy, key: Keys.fallbackPolicy) }
-    }
-
     @Published var whisperBinaryPath: String {
         didSet { defaults.set(whisperBinaryPath, forKey: Keys.whisperBinaryPath) }
     }
@@ -29,11 +25,26 @@ final class AppPreferencesStore: ObservableObject {
         didSet { defaults.set(modelPath, forKey: Keys.modelPath) }
     }
 
+    @Published var selectedMicrophoneID: UInt32? {
+        didSet {
+            if let selectedMicrophoneID {
+                defaults.set(Int(selectedMicrophoneID), forKey: Keys.selectedMicrophoneID)
+            } else {
+                defaults.removeObject(forKey: Keys.selectedMicrophoneID)
+            }
+        }
+    }
+
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             whisperBinaryPath: whisperBinaryPath,
             modelPath: modelPath,
-            modelSelection: modelSelection
+            modelSelection: modelSelection,
+            preprocessing: AudioPreprocessingConfiguration(),
+            promptTerms: [],
+            noSpeechThreshold: 0.45,
+            beamSize: 8,
+            bestOf: 8
         )
     }
 
@@ -43,18 +54,22 @@ final class AppPreferencesStore: ObservableObject {
         static let shortcut = "shortcut"
         static let modelSelection = "modelSelection"
         static let workerIdleTimeout = "workerIdleTimeout"
-        static let fallbackPolicy = "fallbackPolicy"
         static let whisperBinaryPath = "whisperBinaryPath"
         static let modelPath = "modelPath"
+        static let selectedMicrophoneID = "selectedMicrophoneID"
     }
 
     private init() {
         shortcut = Self.decode(Keys.shortcut) ?? .default
-        modelSelection = Self.decode(Keys.modelSelection) ?? .baseEn
+        modelSelection = .baseEn
         workerIdleTimeout = defaults.object(forKey: Keys.workerIdleTimeout) as? TimeInterval ?? 120
-        fallbackPolicy = Self.decode(Keys.fallbackPolicy) ?? .accessibilityThenPaste
         whisperBinaryPath = defaults.string(forKey: Keys.whisperBinaryPath) ?? "/opt/homebrew/bin/whisper-cli"
         modelPath = defaults.string(forKey: Keys.modelPath) ?? "~/Library/Application Support/Listener/\(WhisperModelSelection.baseEn.suggestedFilename)"
+        if defaults.object(forKey: Keys.selectedMicrophoneID) != nil {
+            selectedMicrophoneID = UInt32(defaults.integer(forKey: Keys.selectedMicrophoneID))
+        } else {
+            selectedMicrophoneID = nil
+        }
     }
 
     private func save<T: Encodable>(_ value: T, key: String) {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum RecordingSessionState: Equatable {
@@ -41,22 +42,6 @@ struct PermissionState: Equatable {
     )
 }
 
-enum TextInsertionFallbackPolicy: String, CaseIterable, Codable, Identifiable {
-    case accessibilityOnly
-    case accessibilityThenPaste
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .accessibilityOnly:
-            return "Accessibility only"
-        case .accessibilityThenPaste:
-            return "Accessibility + paste fallback"
-        }
-    }
-}
-
 enum WhisperModelSelection: String, CaseIterable, Codable, Identifiable {
     case baseEn
     case smallEn
@@ -85,20 +70,26 @@ enum WhisperModelSelection: String, CaseIterable, Codable, Identifiable {
 struct ShortcutSpec: Equatable, Codable {
     enum TriggerKey: String, CaseIterable, Codable, Identifiable {
         case fn
+        case optionFn
         case rightCommand
         case rightOption
-        case space
-        case grave
-        case customCharacter
+        case customShortcut
 
         var id: String { rawValue }
     }
 
     var triggerKey: TriggerKey
     var modifiers: EventModifiers
-    var customCharacter: String?
+    var keyCode: UInt16?
+    var keyDisplay: String?
 
-    static let `default` = ShortcutSpec(triggerKey: .fn, modifiers: [], customCharacter: nil)
+    static let `default` = ShortcutSpec(triggerKey: .optionFn, modifiers: [], keyCode: nil, keyDisplay: nil)
+    static let fnOnly = ShortcutSpec(triggerKey: .fn, modifiers: [], keyCode: nil, keyDisplay: nil)
+    static let rightCommand = ShortcutSpec(triggerKey: .rightCommand, modifiers: [], keyCode: nil, keyDisplay: nil)
+    static let rightOption = ShortcutSpec(triggerKey: .rightOption, modifiers: [], keyCode: nil, keyDisplay: nil)
+    static func custom(keyCode: UInt16, modifiers: EventModifiers, keyDisplay: String) -> ShortcutSpec {
+        ShortcutSpec(triggerKey: .customShortcut, modifiers: modifiers, keyCode: keyCode, keyDisplay: keyDisplay)
+    }
 
     var displayName: String {
         let prefix = modifiers.displayName
@@ -106,19 +97,17 @@ struct ShortcutSpec: Equatable, Codable {
         switch triggerKey {
         case .fn:
             keyName = "Fn"
+        case .optionFn:
+            keyName = "Option + Fn"
         case .rightCommand:
             keyName = "Right Command"
         case .rightOption:
             keyName = "Right Option"
-        case .space:
-            keyName = "Space"
-        case .grave:
-            keyName = "`"
-        case .customCharacter:
-            keyName = customCharacter?.uppercased() ?? "Custom"
+        case .customShortcut:
+            keyName = keyDisplay ?? "Custom Shortcut"
         }
 
-        if prefix.isEmpty {
+        if prefix.isEmpty || triggerKey == .optionFn {
             return keyName
         }
         return "\(prefix) + \(keyName)"
@@ -137,6 +126,15 @@ struct EventModifiers: OptionSet, Codable, Equatable {
         self.rawValue = rawValue
     }
 
+    init(nsFlags: NSEvent.ModifierFlags, removingTriggerFor trigger: ShortcutSpec.TriggerKey) {
+        var value: EventModifiers = []
+        if nsFlags.contains(.command), trigger != .rightCommand { value.insert(.command) }
+        if nsFlags.contains(.option), trigger != .rightOption && trigger != .optionFn { value.insert(.option) }
+        if nsFlags.contains(.control) { value.insert(.control) }
+        if nsFlags.contains(.shift) { value.insert(.shift) }
+        self = value
+    }
+
     var displayName: String {
         var parts: [String] = []
         if contains(.control) { parts.append("Control") }
@@ -151,6 +149,11 @@ struct TranscriptionConfiguration: Equatable {
     var whisperBinaryPath: String
     var modelPath: String
     var modelSelection: WhisperModelSelection
+    var preprocessing: AudioPreprocessingConfiguration
+    var promptTerms: [String]
+    var noSpeechThreshold: Float
+    var beamSize: Int
+    var bestOf: Int
 }
 
 enum TextInsertionResult: Equatable {

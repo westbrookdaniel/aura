@@ -1,15 +1,17 @@
 import AppKit
-import SwiftUI
 
 @MainActor
-final class StatusItemController {
+final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let appState: AppState
+    private let menu = NSMenu()
 
     init(appState: AppState) {
         self.appState = appState
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
         configureStatusItem()
+        configureMenu()
     }
 
     private func configureStatusItem() {
@@ -18,32 +20,11 @@ final class StatusItemController {
             button.toolTip = "Listener"
             button.imagePosition = .imageOnly
         }
-
-        rebuildMenu()
+        statusItem.menu = menu
     }
 
-    func rebuildMenu() {
-        let menu = NSMenu()
-
-        let statusItem = NSMenuItem(title: "State: \(appState.sessionState.title)", action: nil, keyEquivalent: "")
-        menu.addItem(statusItem)
-
-        let shortcutItem = NSMenuItem(title: "Shortcut: \(appState.preferences.shortcut.displayName)", action: nil, keyEquivalent: "")
-        menu.addItem(shortcutItem)
-
-        if !appState.lastTranscript.isEmpty {
-            let transcriptItem = NSMenuItem(title: "Last transcript: \(appState.lastTranscript)", action: nil, keyEquivalent: "")
-            transcriptItem.isEnabled = false
-            menu.addItem(transcriptItem)
-        }
-
-        if let error = appState.lastErrorMessage {
-            let errorItem = NSMenuItem(title: "Error: \(error)", action: nil, keyEquivalent: "")
-            errorItem.isEnabled = false
-            menu.addItem(errorItem)
-        }
-
-        menu.addItem(.separator())
+    private func configureMenu() {
+        menu.delegate = self
 
         menu.addItem(NSMenuItem(
             title: "Settings…",
@@ -52,49 +33,15 @@ final class StatusItemController {
         ).configured(target: self))
 
         menu.addItem(NSMenuItem(
-            title: "Microphone Permission",
-            action: #selector(requestMicrophonePermission),
-            keyEquivalent: ""
-        ).configured(target: self))
-
-        menu.addItem(NSMenuItem(
-            title: "Accessibility Settings",
-            action: #selector(openAccessibilitySettings),
-            keyEquivalent: ""
-        ).configured(target: self))
-
-        menu.addItem(NSMenuItem(
-            title: "Input Monitoring Settings",
-            action: #selector(openInputMonitoringSettings),
-            keyEquivalent: ""
-        ).configured(target: self))
-
-        menu.addItem(.separator())
-
-        menu.addItem(NSMenuItem(
             title: "Quit Listener",
             action: #selector(quit),
             keyEquivalent: "q"
         ).configured(target: self))
-
-        statusItem.menu = menu
     }
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        appState.openSettingsWindow()
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    @objc private func requestMicrophonePermission() {
-        Task { await appState.requestMicrophonePermission() }
-    }
-
-    @objc private func openAccessibilitySettings() {
-        appState.openAccessibilitySettings()
-    }
-
-    @objc private func openInputMonitoringSettings() {
-        appState.openInputMonitoringSettings()
     }
 
     @objc private func quit() {

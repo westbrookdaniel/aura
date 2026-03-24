@@ -1,4 +1,5 @@
 import AVFoundation
+@preconcurrency import ApplicationServices
 import Cocoa
 import Foundation
 
@@ -13,6 +14,15 @@ struct PermissionsManager {
 
     func requestMicrophoneAccess() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    func requestAccessibilityAccess() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    func requestInputMonitoringAccess() {
+        _ = CGRequestListenEventAccess()
     }
 
     func openAccessibilitySettings() {

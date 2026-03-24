@@ -1,22 +1,32 @@
 @preconcurrency import AVFoundation
+import AudioToolbox
 import Combine
 import Foundation
 
-@MainActor
-final class AudioRecorder: ObservableObject {
-    @Published private(set) var normalizedLevels: [Double] = Array(repeating: 0, count: 24)
+final class AudioRecorder: ObservableObject, @unchecked Sendable {
+    @Published private(set) var normalizedLevels: [Double] = Array(repeating: 0, count: 40)
 
     private let engine = AVAudioEngine()
-    private let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)
+    private let outputFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: 16_000,
+        channels: 1,
+        interleaved: false
+    )
+    private let stateLock = NSLock()
     private var pcmBuffer = Data()
     private var recordingURL: URL?
     private var isRecording = false
 
-    func startRecording() throws -> URL {
+    func startRecording(preferredDeviceID: AudioDeviceID?) throws -> URL {
         guard !isRecording else { throw AudioRecorderError.alreadyRecording }
         guard let outputFormat else { throw AudioRecorderError.unsupportedFormat }
 
+        try configureInputDevice(preferredDeviceID)
+
+        stateLock.lock()
         pcmBuffer = Data()
+        stateLock.unlock()
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("whisperbar-\(UUID().uuidString).wav")
         recordingURL = tempURL
 
@@ -43,14 +53,39 @@ final class AudioRecorder: ObservableObject {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
-        normalizedLevels = Array(repeating: 0, count: normalizedLevels.count)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.normalizedLevels = Array(repeating: 0, count: self.normalizedLevels.count)
+        }
 
+        stateLock.lock()
         let wavData = WAVEncoder.wrapPCM16Mono(
             pcmData: pcmBuffer,
             sampleRate: 16_000
         )
+        stateLock.unlock()
         try wavData.write(to: recordingURL, options: .atomic)
         return recordingURL
+    }
+
+    private func configureInputDevice(_ deviceID: AudioDeviceID?) throws {
+        guard let audioUnit = engine.inputNode.audioUnit else {
+            throw AudioRecorderError.inputDeviceUnavailable
+        }
+        guard var deviceID else { return }
+
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        guard status == noErr else {
+            throw AudioRecorderError.couldNotSelectInputDevice
+        }
     }
 
     private func handle(buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outputFormat: AVAudioFormat) {
@@ -75,15 +110,17 @@ final class AudioRecorder: ObservableObject {
         guard let channelData = buffer.int16ChannelData?[0] else { return }
         let frameCount = Int(buffer.frameLength)
         let data = Data(bytes: channelData, count: frameCount * MemoryLayout<Int16>.size)
+        stateLock.lock()
         pcmBuffer.append(data)
+        stateLock.unlock()
     }
 
     private func publishLevels(from buffer: AVAudioPCMBuffer) {
-        guard let channel = buffer.floatChannelData?[0] else { return }
+        guard let channel = buffer.int16ChannelData?[0] else { return }
         let frameCount = Int(buffer.frameLength)
         guard frameCount > 0 else { return }
 
-        let bucketCount = normalizedLevels.count
+        let bucketCount = 40
         let bucketSize = max(1, frameCount / bucketCount)
         var nextLevels: [Double] = []
         nextLevels.reserveCapacity(bucketCount)
@@ -96,11 +133,11 @@ final class AudioRecorder: ObservableObject {
                 continue
             }
 
-            var peak: Float = 0
+            var peak: Int16 = 0
             for index in start..<end {
                 peak = max(peak, abs(channel[index]))
             }
-            nextLevels.append(min(1, Double(peak) * 4))
+            nextLevels.append(min(1, Double(peak) / Double(Int16.max)))
         }
 
         DispatchQueue.main.async { [weak self] in
@@ -114,6 +151,8 @@ enum AudioRecorderError: LocalizedError {
     case notRecording
     case unsupportedFormat
     case converterUnavailable
+    case inputDeviceUnavailable
+    case couldNotSelectInputDevice
 
     var errorDescription: String? {
         switch self {
@@ -125,6 +164,10 @@ enum AudioRecorderError: LocalizedError {
             return "The recorder could not create a Whisper-compatible format."
         case .converterUnavailable:
             return "The recorder could not create an audio converter."
+        case .inputDeviceUnavailable:
+            return "The recorder could not access the input audio unit."
+        case .couldNotSelectInputDevice:
+            return "The selected microphone could not be activated."
         }
     }
 }

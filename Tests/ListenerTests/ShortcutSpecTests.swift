@@ -4,18 +4,19 @@ import Testing
 struct ShortcutSpecTests {
     @Test
     func defaultShortcutUsesFn() {
-        #expect(ShortcutSpec.default.triggerKey == .fn)
+        #expect(ShortcutSpec.default.triggerKey == .optionFn)
         #expect(ShortcutSpec.default.modifiers.isEmpty)
     }
 
     @Test
     func displayNameIncludesModifiers() {
         let shortcut = ShortcutSpec(
-            triggerKey: .space,
+            triggerKey: .customShortcut,
             modifiers: [.control, .option],
-            customCharacter: nil
+            keyCode: 40,
+            keyDisplay: "K"
         )
 
-        #expect(shortcut.displayName == "Control + Option + Space")
+        #expect(shortcut.displayName == "Control + Option + K")
     }
 }

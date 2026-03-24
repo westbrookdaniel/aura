@@ -1,163 +1,158 @@
+import Carbon.HIToolbox
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var isCapturingShortcut = false
 
     var body: some View {
-        Form {
-            Section("Shortcut") {
-                Picker("Trigger", selection: shortcutTriggerBinding) {
-                    ForEach(ShortcutSpec.TriggerKey.allCases) { trigger in
-                        Text(triggerLabel(trigger)).tag(trigger)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let error = appState.lastErrorMessage, !error.isEmpty {
+                    SettingsWarningCard(
+                        title: "Warning",
+                        message: error,
+                        dismiss: { appState.clearError() }
+                    )
+                }
+
+                SettingsCard(title: "Shortcut") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Picker("Shortcut", selection: presetShortcutBinding) {
+                            ForEach(ShortcutPreset.allCases) { preset in
+                                Text(preset.label).tag(preset)
+                            }
+                        }
+
+                        Text(presetSubtitle(ShortcutPreset(from: appState.preferences.shortcut)))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+
+                        if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
+                            HStack {
+                                Text("Current")
+                                Spacer()
+                                Text(appState.preferences.shortcut.displayName)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            ShortcutCaptureButton(
+                                isCapturing: $isCapturingShortcut,
+                                currentTitle: appState.preferences.shortcut.displayName
+                            ) { shortcut in
+                                appState.updateShortcut(shortcut)
+                                isCapturingShortcut = false
+                            }
+                        }
                     }
                 }
 
-                if appState.preferences.shortcut.triggerKey == .customCharacter {
-                    TextField("Custom key", text: customCharacterBinding)
-                }
+                SettingsCard(title: "Permissions") {
+                    PermissionRow(
+                        title: "Microphone",
+                        status: appState.permissionState.microphone.rawValue,
+                        primaryAction: { Task { await appState.requestMicrophonePermission() } },
+                        secondaryAction: { appState.openAccessibilitySettings() },
+                        primaryTitle: "Request",
+                        secondaryTitle: "System Settings"
+                    )
 
-                ModifierTogglesView(shortcut: appState.preferences.shortcut) { updated in
-                    appState.updateShortcut(updated)
-                }
-            }
+                    PermissionRow(
+                        title: "Accessibility",
+                        status: appState.permissionState.accessibility.rawValue,
+                        primaryAction: { appState.requestAccessibilityPermission() },
+                        secondaryAction: { appState.openAccessibilitySettings() },
+                        primaryTitle: "Prompt",
+                        secondaryTitle: "System Settings"
+                    )
 
-            Section("Whisper") {
-                Picker("Model", selection: modelBinding) {
-                    ForEach(WhisperModelSelection.allCases) { model in
-                        Text(model.displayName).tag(model)
-                    }
-                }
+                    PermissionInfoRow(
+                        title: "Input Monitoring",
+                        status: appState.permissionState.inputMonitoring.rawValue,
+                        action: { appState.openInputMonitoringSettings() },
+                        actionTitle: "System Settings"
+                    )
 
-                TextField("whisper-cli path", text: whisperPathBinding)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Model file path", text: modelPathBinding)
-                    .textFieldStyle(.roundedBorder)
-
-                Stepper(
-                    "Auto-unload after \(Int(appState.preferences.workerIdleTimeout))s",
-                    value: idleTimeoutBinding,
-                    in: 15...600,
-                    step: 15
-                )
-            }
-
-            Section("Insertion") {
-                Picker("Fallback policy", selection: fallbackBinding) {
-                    ForEach(TextInsertionFallbackPolicy.allCases) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
-            }
-
-            Section("Permissions") {
-                HStack {
-                    Text("Microphone")
-                    Spacer()
-                    Text(appState.permissionState.microphone.rawValue)
+                    Text("If Listener is running from Terminal or `swift run`, macOS may show Terminal in Privacy settings until the app is packaged as its own app bundle.")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
 
-                HStack {
-                    Text("Accessibility")
-                    Spacer()
-                    Text(appState.permissionState.accessibility.rawValue)
+                SettingsCard(title: "Audio") {
+                    Picker("Microphone", selection: microphoneSelectionBinding) {
+                        Text("System Default").tag(Optional<UInt32>.none)
+                        ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
+                            Text(microphone.displayName).tag(Optional(microphone.stableID))
+                        }
+                    }
+
+                    Text("Pick a specific input device, or leave Listener on the macOS default microphone.")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+
+                    HStack {
+                        Button("Refresh", action: appState.refreshMicrophones)
+                            .buttonStyle(.bordered)
+                    }
                 }
 
-                HStack {
-                    Text("Input Monitoring")
-                    Spacer()
-                    Text(appState.permissionState.inputMonitoring.rawValue)
+                SettingsCard(title: "Whisper") {
+                    InstallStatusRow(
+                        title: "Base English",
+                        state: appState.whisperSetupState,
+                        primaryTitle: "Download",
+                        primaryAction: { appState.downloadWhisperSetup() },
+                        secondaryTitle: "Reveal",
+                        secondaryAction: { appState.revealWhisperFiles() }
+                    )
+
+                    Stepper(
+                        "Auto-unload after \(Int(appState.preferences.workerIdleTimeout))s",
+                        value: idleTimeoutBinding,
+                        in: 15...600,
+                        step: 15
+                    )
+                }
+
+                SettingsCard(title: "Accuracy") {
+                    Text("Quiet-speech enhancement runs automatically before transcription. Add custom coding, directory, and application terms below to improve recognition.")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                }
 
-                HStack {
-                    Button("Request Microphone") {
-                        Task { await appState.requestMicrophonePermission() }
+                    Text("Custom Vocabulary")
+                        .font(.system(size: 14, weight: .semibold))
+
+                    TextEditor(text: Binding(
+                        get: { appState.accuracyVocabularyText },
+                        set: { appState.updateAccuracyVocabularyText($0) }
+                    ))
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minHeight: 140)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.black.opacity(0.08))
+                    )
+
+                    HStack {
+                        Button("Import", action: appState.importAccuracyVocabulary)
+                            .buttonStyle(.bordered)
+                        Button("Export", action: appState.exportAccuracyVocabulary)
+                            .buttonStyle(.bordered)
+                        Button("Reset", action: appState.resetAccuracyVocabulary)
+                            .buttonStyle(.bordered)
                     }
-                    Button("Open Accessibility") {
-                        appState.openAccessibilitySettings()
-                    }
-                    Button("Open Input Monitoring") {
-                        appState.openInputMonitoringSettings()
-                    }
+                }
+                SettingsCard(title: "System") {
+                    Toggle("Launch at login", isOn: Binding(
+                        get: { appState.isLaunchAtLoginEnabled },
+                        set: { appState.setLaunchAtLogin(enabled: $0) }
+                    ))
                 }
             }
-
-            Section("System") {
-                Toggle("Launch at login", isOn: Binding(
-                    get: { appState.isLaunchAtLoginEnabled },
-                    set: { appState.setLaunchAtLogin(enabled: $0) }
-                ))
-            }
-
-            if let error = appState.lastErrorMessage {
-                Section("Last Error") {
-                    Text(error)
-                        .foregroundStyle(.red)
-                }
-            }
+            .padding(20)
         }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    private var shortcutTriggerBinding: Binding<ShortcutSpec.TriggerKey> {
-        Binding(
-            get: { appState.preferences.shortcut.triggerKey },
-            set: {
-                var updated = appState.preferences.shortcut
-                updated.triggerKey = $0
-                if $0 != .customCharacter {
-                    updated.customCharacter = nil
-                }
-                appState.updateShortcut(updated)
-            }
-        )
-    }
-
-    private var customCharacterBinding: Binding<String> {
-        Binding(
-            get: { appState.preferences.shortcut.customCharacter ?? "" },
-            set: {
-                var updated = appState.preferences.shortcut
-                updated.customCharacter = String($0.prefix(1))
-                appState.updateShortcut(updated)
-            }
-        )
-    }
-
-    private var modelBinding: Binding<WhisperModelSelection> {
-        Binding(
-            get: { appState.preferences.modelSelection },
-            set: {
-                appState.updateModelSelection($0)
-                if appState.preferences.modelPath.hasSuffix(".bin") == false {
-                    appState.updateModelPath("~/Library/Application Support/Listener/\($0.suggestedFilename)")
-                }
-            }
-        )
-    }
-
-    private var whisperPathBinding: Binding<String> {
-        Binding(
-            get: { appState.preferences.whisperBinaryPath },
-            set: { appState.updateWhisperBinaryPath($0) }
-        )
-    }
-
-    private var modelPathBinding: Binding<String> {
-        Binding(
-            get: { appState.preferences.modelPath },
-            set: { appState.updateModelPath($0) }
-        )
-    }
-
-    private var fallbackBinding: Binding<TextInsertionFallbackPolicy> {
-        Binding(
-            get: { appState.preferences.fallbackPolicy },
-            set: { appState.updateFallbackPolicy($0) }
-        )
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var idleTimeoutBinding: Binding<Double> {
@@ -167,53 +162,343 @@ struct SettingsView: View {
         )
     }
 
-    private func triggerLabel(_ trigger: ShortcutSpec.TriggerKey) -> String {
-        switch trigger {
+    private var microphoneSelectionBinding: Binding<UInt32?> {
+        Binding(
+            get: { appState.preferences.selectedMicrophoneID },
+            set: { appState.updateSelectedMicrophoneID($0) }
+        )
+    }
+
+    private var presetShortcutBinding: Binding<ShortcutPreset> {
+        Binding(
+            get: { ShortcutPreset(from: appState.preferences.shortcut) },
+            set: { preset in
+                switch preset {
+                case .optionFn:
+                    isCapturingShortcut = false
+                    appState.updateShortcut(.default)
+                case .fn:
+                    isCapturingShortcut = false
+                    appState.updateShortcut(.fnOnly)
+                case .rightCommand:
+                    isCapturingShortcut = false
+                    appState.updateShortcut(.rightCommand)
+                case .rightOption:
+                    isCapturingShortcut = false
+                    appState.updateShortcut(.rightOption)
+                case .custom:
+                    isCapturingShortcut = true
+                    if appState.preferences.shortcut.triggerKey != .customShortcut {
+                        appState.updateShortcut(.custom(keyCode: 0, modifiers: [], keyDisplay: "Not Set"))
+                    }
+                }
+            }
+        )
+    }
+
+    private func presetSubtitle(_ preset: ShortcutPreset) -> String {
+        switch preset {
+        case .optionFn:
+            return "Default. Harder to trigger by accident."
+        case .fn:
+            return "Simplest hold-to-talk option."
+        case .rightCommand:
+            return "Good fallback if Fn is unreliable."
+        case .rightOption:
+            return "Another easy-to-reach fallback."
+        case .custom:
+            return "Record any key or key combo you want."
+        }
+    }
+
+}
+
+enum ShortcutPreset: String, CaseIterable, Identifiable {
+    case optionFn
+    case fn
+    case rightCommand
+    case rightOption
+    case custom
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .optionFn:
+            return "Option + Fn"
         case .fn:
             return "Fn"
         case .rightCommand:
             return "Right Command"
         case .rightOption:
             return "Right Option"
-        case .space:
-            return "Space"
-        case .grave:
-            return "Grave (`)"
-        case .customCharacter:
-            return "Custom Character"
+        case .custom:
+            return "Custom Shortcut"
+        }
+    }
+
+    init(from shortcut: ShortcutSpec) {
+        switch shortcut.triggerKey {
+        case .optionFn:
+            self = .optionFn
+        case .fn:
+            self = .fn
+        case .rightCommand:
+            self = .rightCommand
+        case .rightOption:
+            self = .rightOption
+        case .customShortcut:
+            self = .custom
         }
     }
 }
 
-struct ModifierTogglesView: View {
-    let shortcut: ShortcutSpec
-    let onUpdate: (ShortcutSpec) -> Void
+struct SettingsCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
 
     var body: some View {
-        HStack {
-            modifierToggle("Control", flag: .control)
-            modifierToggle("Option", flag: .option)
-            modifierToggle("Shift", flag: .shift)
-            modifierToggle("Command", flag: .command)
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+
+            content
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct SettingsWarningCard: View {
+    let title: String
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.white)
+                .padding(10)
+                .background(Circle().fill(Color.orange.opacity(0.9)))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                Text(message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button("Dismiss", action: dismiss)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.orange.opacity(0.18),
+                            Color.red.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.orange.opacity(0.24), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct PermissionRow: View {
+    let title: String
+    let status: String
+    let primaryAction: () -> Void
+    let secondaryAction: () -> Void
+    let primaryTitle: String
+    let secondaryTitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(status)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button(primaryTitle, action: primaryAction)
+                    .buttonStyle(.borderedProminent)
+                Button(secondaryTitle, action: secondaryAction)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct PermissionInfoRow: View {
+    let title: String
+    let status: String
+    let action: () -> Void
+    let actionTitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(status)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(actionTitle, action: action)
+                .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct InstallStatusRow: View {
+    let title: String
+    let state: InstallProgressState
+    let primaryTitle: String
+    let primaryAction: () -> Void
+    let secondaryTitle: String
+    let secondaryAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(statusText)
+                    .foregroundStyle(statusColor)
+            }
+
+            HStack {
+                Button(primaryTitle, action: primaryAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isWorking)
+                Button(secondaryTitle, action: secondaryAction)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var isWorking: Bool {
+        if case .working = state { return true }
+        return false
+    }
+
+    private var statusText: String {
+        switch state {
+        case .idle:
+            return "Not installed"
+        case .working(let message), .success(let message), .failure(let message):
+            return message
         }
     }
 
-    private func modifierToggle(_ title: String, flag: EventModifiers) -> some View {
-        Toggle(
-            title,
-            isOn: Binding(
-                get: { shortcut.modifiers.contains(flag) },
-                set: { enabled in
-                    var updated = shortcut
-                    if enabled {
-                        updated.modifiers.insert(flag)
-                    } else {
-                        updated.modifiers.remove(flag)
-                    }
-                    onUpdate(updated)
+    private var statusColor: Color {
+        switch state {
+        case .success:
+            return .green
+        case .failure:
+            return .orange
+        case .working:
+            return .secondary
+        case .idle:
+            return .secondary
+        }
+    }
+}
+
+struct ShortcutCaptureButton: NSViewRepresentable {
+    @Binding var isCapturing: Bool
+    let currentTitle: String
+    let onCapture: (ShortcutSpec) -> Void
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: "Record Custom Shortcut", target: context.coordinator, action: #selector(Coordinator.toggleCapture))
+        button.bezelStyle = .rounded
+        context.coordinator.button = button
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.parent = self
+        button.title = isCapturing ? "Press a shortcut…" : "Change Custom Shortcut"
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var parent: ShortcutCaptureButton
+        weak var button: NSButton?
+        private var monitor: Any?
+
+        init(parent: ShortcutCaptureButton) {
+            self.parent = parent
+        }
+
+        @objc func toggleCapture() {
+            if parent.isCapturing {
+                stopCapture()
+            } else {
+                startCapture()
+            }
+        }
+
+        private func startCapture() {
+            parent.isCapturing = true
+            button?.window?.makeFirstResponder(button)
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+                guard let self else { return event }
+                if event.keyCode == UInt16(kVK_Escape) {
+                    self.stopCapture()
+                    return nil
                 }
-            )
-        )
-        .toggleStyle(.switch)
+                let modifiers = EventModifiers(nsFlags: event.modifierFlags, removingTriggerFor: .customShortcut)
+                let display = Self.displayName(for: event)
+                self.parent.onCapture(.custom(keyCode: event.keyCode, modifiers: modifiers, keyDisplay: display))
+                self.stopCapture()
+                return nil
+            }
+        }
+
+        private func stopCapture() {
+            parent.isCapturing = false
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private static func displayName(for event: NSEvent) -> String {
+            if let characters = event.charactersIgnoringModifiers?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !characters.isEmpty {
+                return characters.uppercased()
+            }
+            return "Key \(event.keyCode)"
+        }
     }
 }
