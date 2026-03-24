@@ -203,7 +203,7 @@ struct SettingsCard<Content: View>: View {
                     .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
                 )
         )
     }
@@ -275,13 +275,14 @@ struct SettingsWarningCard: View {
 struct SettingsHeaderView: View {
     var body: some View {
         Rectangle()
-            .fill(Color.white)
+            .fill(Color(nsColor: .separatorColor).opacity(0.7))
             .frame(height: 1)
     }
 }
 
 struct SetupFlowCard: View {
     @ObservedObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -341,64 +342,128 @@ struct SetupFlowCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            Color(red: 0.89, green: 0.94, blue: 1.00),
-                            Color.white,
-                            Color(red: 0.97, green: 0.98, blue: 1.00)
-                        ],
+                        colors: backgroundGradient,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.92), lineWidth: 1)
+                        .stroke(borderColor, lineWidth: 1)
                 )
         )
+    }
+
+    private var backgroundGradient: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.06, green: 0.12, blue: 0.21),
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .windowBackgroundColor),
+            ]
+        }
+
+        return [
+            Color(red: 0.89, green: 0.94, blue: 1.00),
+            Color.white,
+            Color(red: 0.97, green: 0.98, blue: 1.00)
+        ]
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.92)
     }
 }
 
 struct SettingsReflectiveButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(labelColor)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.96 : 1.0))
+                    .fill(backgroundColor(isPressed: configuration.isPressed))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.95), lineWidth: 1)
+                            .stroke(primaryStrokeColor, lineWidth: 1)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
+                            .stroke(secondaryStrokeColor, lineWidth: 0.5)
                     )
             )
             .opacity(configuration.isPressed ? 0.88 : 1)
     }
+
+    private var labelColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.94) : Color.black.opacity(0.78)
+    }
+
+    private func backgroundColor(isPressed: Bool) -> Color {
+        if colorScheme == .dark {
+            return Color.white.opacity(isPressed ? 0.12 : 0.09)
+        }
+
+        return Color.white.opacity(isPressed ? 0.96 : 1.0)
+    }
+
+    private var primaryStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.95)
+    }
+
+    private var secondaryStrokeColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.30) : Color.black.opacity(0.05)
+    }
 }
 
 struct SettingsSubtleGhostButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(labelColor)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.94 : 0.98))
+                    .fill(backgroundColor(isPressed: configuration.isPressed))
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(Color.white.opacity(0.92), lineWidth: 1)
+                            .stroke(primaryStrokeColor, lineWidth: 1)
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
+                            .stroke(secondaryStrokeColor, lineWidth: 0.5)
                     )
             )
             .opacity(configuration.isPressed ? 0.84 : 1)
     }
+
+    private var labelColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.82) : Color.secondary
+    }
+
+    private func backgroundColor(isPressed: Bool) -> Color {
+        if colorScheme == .dark {
+            return Color.white.opacity(isPressed ? 0.04 : 0.0)
+        }
+
+        return Color.white.opacity(isPressed ? 0.94 : 0.98)
+    }
+
+    private var primaryStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.92)
+    }
+
+    private var secondaryStrokeColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.05)
+    }
 }
 
 struct SettingsPrimaryBlueButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
@@ -406,13 +471,24 @@ struct SettingsPrimaryBlueButtonStyle: ButtonStyle {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.23, green: 0.53, blue: 0.98).opacity(configuration.isPressed ? 0.9 : 1))
+                    .fill(fillColor(isPressed: configuration.isPressed))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                            .stroke(borderColor, lineWidth: 1)
                     )
             )
             .opacity(configuration.isPressed ? 0.92 : 1)
+    }
+
+    private func fillColor(isPressed: Bool) -> Color {
+        let base = colorScheme == .dark
+            ? Color(red: 0.28, green: 0.58, blue: 1.00)
+            : Color(red: 0.23, green: 0.53, blue: 0.98)
+        return base.opacity(isPressed ? 0.9 : 1)
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.35)
     }
 }
 
@@ -538,6 +614,8 @@ struct PermissionStatusBadge: View {
 }
 
 struct InstallStatusBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let state: InstallProgressState
 
     var body: some View {
@@ -587,7 +665,10 @@ struct InstallStatusBadge: View {
         case .working:
             return Color.blue.opacity(0.12)
         case .idle:
-            return Color.black.opacity(0.08)
+            if colorScheme == .dark {
+                return Color.white.opacity(0.07)
+            }
+            return Color.black.opacity(0.07)
         }
     }
 
@@ -600,6 +681,9 @@ struct InstallStatusBadge: View {
         case .working:
             return Color.blue.opacity(0.82)
         case .idle:
+            if colorScheme == .dark {
+                return Color.white.opacity(0.65)
+            }
             return Color.black.opacity(0.65)
         }
     }
