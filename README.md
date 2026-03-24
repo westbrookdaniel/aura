@@ -41,6 +41,75 @@ The app needs:
 - Accessibility access for focused field insertion
 - Input Monitoring for the global press-and-hold shortcut
 
+## Build a distributable app
+
+This repo now includes a release bundling script that turns the SwiftPM executable into a macOS `.app` bundle:
+
+```bash
+cd /Users/dan/dev/listener
+./scripts/build-app.sh
+```
+
+That produces:
+
+- `dist/Listener.app`
+- `dist/Listener.zip`
+
+What the script does:
+
+- builds the app in release mode
+- creates a real macOS app bundle with `Info.plist`
+- marks the app as a menu bar app with `LSUIElement`
+- includes `NSMicrophoneUsageDescription` so microphone permission prompts work correctly
+- optionally signs the app
+- optionally submits it for notarization and staples the ticket
+
+## Signing and notarization
+
+The script now defaults to:
+
+- bundle ID: `com.westbrookdaniel.listener`
+- version: `0.1.0`
+- Apple ID: `westy12dan@gmail.com`
+- developer name: `Daniel Westbrook`
+- notary profile: `listener-notary`
+
+For a different version:
+
+```bash
+./scripts/build-app.sh --version 0.2.0
+```
+
+For distribution outside the App Store, sign with your Developer ID Application certificate:
+
+```bash
+./scripts/build-app.sh --team-id "TEAMID"
+```
+
+If you want notarization, there is still one one-time setup step to store your app-specific password in the keychain:
+
+```bash
+./scripts/setup-notary-profile.sh \
+  --team-id "TEAMID" \
+  --app-password "app-specific-password"
+```
+
+Then build and notarize:
+
+```bash
+./scripts/build-app.sh \
+  --team-id "TEAMID" \
+  --notarize
+```
+
+## Remaining release polish
+
+The project is now buildable as a distributable app bundle, but these are still external release decisions rather than code gaps:
+
+- provide your Apple Developer Team ID at build time
+- notarize before sharing broadly to avoid Gatekeeper warnings
+- add a custom `Packaging/AppIcon.icns` if you want a branded app icon instead of the default generic one
+
 ## Notes
 
 - `fn` handling on macOS is quirky across hardware and OS versions; the app uses global flag/key monitoring, but some machines may work better with Right Command or another custom trigger.

@@ -158,7 +158,7 @@ enum TextInsertionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .secureField:
-            return "WhisperBar will not insert text into secure fields."
+            return "Listener will not insert text into secure fields."
         case .couldNotCreateEventSource:
             return "Could not create the key event source for paste fallback."
         case .couldNotWritePasteboard:

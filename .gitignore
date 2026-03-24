@@ -1,6 +1,8 @@
 .DS_Store
 .build/
+.build-release/
 .cache/
+dist/
 .swiftpm/
 Packages/
 Package.resolved

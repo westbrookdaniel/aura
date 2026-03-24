@@ -19,20 +19,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        let appState = WhisperBarAppHolder.shared.appState
+        let appState = ListenerAppHolder.shared.appState
         statusController = StatusItemController(appState: appState)
         appState.start()
         appState.openSettingsWindow()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        WhisperBarAppHolder.shared.appState.stop()
+        ListenerAppHolder.shared.appState.stop()
     }
 }
 
 @MainActor
-final class WhisperBarAppHolder {
-    static let shared = WhisperBarAppHolder()
+final class ListenerAppHolder {
+    static let shared = ListenerAppHolder()
     let appState = AppState()
 
     private init() {}
