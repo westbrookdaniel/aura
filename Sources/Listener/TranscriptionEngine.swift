@@ -30,7 +30,6 @@ actor WhisperCLITranscriptionEngine: TranscriptionEngine {
             "-m", modelPath,
             "-f", audioURL.path,
             "-l", "en",
-            "-ng",
             "-otxt",
             "-of", outputBase.path,
             "-np"

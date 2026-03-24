@@ -17,7 +17,7 @@ enum InstallProgressState: Equatable {
 }
 
 enum WhisperInstallService {
-    static let baseEnglishFilename = "ggml-base.en.bin"
+    static let mediumEnglishFilename = "ggml-medium.en.bin"
 
     static func installCLI() async throws -> String {
         let brewPath = try resolveBrewPath()
@@ -103,11 +103,11 @@ enum WhisperInstallService {
             appropriateFor: nil,
             create: true
         ).appendingPathComponent("Listener", isDirectory: true)
-        return appSupport.appendingPathComponent(baseEnglishFilename)
+        return appSupport.appendingPathComponent(mediumEnglishFilename)
     }
 
     private static var downloadURL: URL {
-        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseEnglishFilename)?download=true")!
+        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(mediumEnglishFilename)?download=true")!
     }
 
     private static func resolveBrewPath() throws -> String {

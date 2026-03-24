@@ -5,6 +5,7 @@ import SwiftUI
 final class OverlayPanelController {
     private enum IndicatorState {
         case recording
+        case loading
         case error
         case warning(String)
     }
@@ -32,6 +33,8 @@ final class OverlayPanelController {
         switch indicatorState {
         case .recording:
             state = .recording
+        case .loading:
+            state = .loading
         case .error:
             state = .error
         case .warning(let message):
@@ -66,6 +69,19 @@ final class OverlayPanelController {
                 self?.hideRecorder()
             }
         }
+    }
+
+    func showLoading() {
+        if recorderPanel == nil {
+            createRecorderPanel()
+        }
+        alertDismissTask?.cancel()
+        alertDismissTask = nil
+        indicatorState = .loading
+        recorderHostingView?.rootView = RecorderOverlayView(state: .loading, level: 0)
+        resizeRecorderPanel(to: NSSize(width: 54, height: 54))
+        positionPanels()
+        recorderPanel?.orderFrontRegardless()
     }
 
     func showClippedStartWarning() {
@@ -141,8 +157,11 @@ final class OverlayPanelController {
         guard let frame = screen?.visibleFrame else { return }
 
         if let recorderPanel {
-            if case .recording = indicatorState {
+            switch indicatorState {
+            case .recording, .loading:
                 resizeRecorderPanel(to: NSSize(width: 54, height: 54))
+            case .error, .warning:
+                break
             }
             let width = recorderPanel.frame.width
             let height = recorderPanel.frame.height

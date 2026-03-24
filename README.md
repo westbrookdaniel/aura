@@ -1,6 +1,6 @@
 # Listener
 
-Listener is a native macOS menu bar dictation utility built in Swift. It stays out of the Dock, listens for a configurable press-and-hold shortcut, records audio while showing a bottom-center waveform pill, captures audio through SoX, runs local transcription through `whisper.cpp` with the fixed `ggml-base.en.bin` model, and inserts the text into the currently focused field.
+Listener is a native macOS menu bar dictation utility built in Swift. It stays out of the Dock, listens for a configurable press-and-hold shortcut, records audio while showing a bottom-center waveform pill, captures audio through SoX, runs local transcription through `whisper.cpp` with the fixed `ggml-medium.en.bin` model, and inserts the text into the currently focused field.
 
 ## Current implementation
 
@@ -18,7 +18,7 @@ Listener is a native macOS menu bar dictation utility built in Swift. It stays o
 - Swift 6 command line tools or Xcode
 - SoX
 - A working `whisper-cli` binary from `whisper.cpp`
-- The `ggml-base.en.bin` Whisper model
+- The `ggml-medium.en.bin` Whisper model
 
 ## Run
 
@@ -31,7 +31,7 @@ By default the app expects:
 
 - `sox` at `/opt/homebrew/bin/sox`
 - `whisper-cli` at `/opt/homebrew/bin/whisper-cli`
-- model file at `~/Library/Application Support/Listener/ggml-base.en.bin`
+- model file at `~/Library/Application Support/Listener/ggml-medium.en.bin`
 
 ## Permissions
 
@@ -44,4 +44,4 @@ The app needs:
 ## Notes
 
 - `fn` handling on macOS is quirky across hardware and OS versions; the app uses global flag/key monitoring, but some machines may work better with Right Command or another custom trigger.
-- Listener uses a single Whisper path based on `ggml-base.en.bin`; there are no alternate model or pipeline options in the UI.
+- Listener uses a single Whisper path based on `ggml-medium.en.bin`; there are no alternate model or pipeline options in the UI.

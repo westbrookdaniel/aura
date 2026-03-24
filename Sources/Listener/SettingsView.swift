@@ -325,14 +325,14 @@ struct SetupFlowCard: View {
                         secondaryAction: { appState.revealRecorderFiles() }
                     )
 
-                    SetupInstallRow(
-                        icon: "waveform.badge.magnifyingglass",
-                        state: appState.whisperSetupState,
-                        primaryTitle: "Download Whisper Model",
-                        primaryAction: { appState.downloadWhisperSetup() },
-                        secondaryTitle: "Reveal",
-                        secondaryAction: { appState.revealWhisperFiles() }
-                    )
+                SetupInstallRow(
+                    icon: "waveform.badge.magnifyingglass",
+                    state: appState.whisperSetupState,
+                    primaryTitle: "Download Whisper Model (1.5 GB)",
+                    primaryAction: { appState.downloadWhisperSetup() },
+                    secondaryTitle: "Reveal",
+                    secondaryAction: { appState.revealWhisperFiles() }
+                )
                 }
             }
         }

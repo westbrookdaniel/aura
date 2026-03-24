@@ -169,12 +169,12 @@ final class AppState: ObservableObject {
                 }
 
                 await MainActor.run {
-                    whisperSetupState = .working("Downloading Base English…")
+                    whisperSetupState = .working("Downloading Medium English…")
                 }
                 let path = try await WhisperInstallService.downloadBaseModel()
                 await MainActor.run {
                     preferences.modelPath = path
-                    whisperSetupState = .success("Base English is ready")
+                    whisperSetupState = .success("Medium English is ready")
                 }
             } catch {
                 await MainActor.run {
@@ -265,7 +265,7 @@ final class AppState: ObservableObject {
 
         if case .working = whisperSetupState {
         } else {
-            whisperSetupState = hasCLI && hasModel ? .success("Base English is ready") : .idle
+            whisperSetupState = hasCLI && hasModel ? .success("Medium English is ready") : .idle
         }
 
         if case .working = recorderSetupState {
@@ -328,13 +328,14 @@ final class AppState: ObservableObject {
         let recordingDuration = Date().timeIntervalSince(recordingStartedAt ?? Date())
         recordingStartedAt = nil
         sessionState = .transcribing
-        overlayController.hideRecorder()
 
         if recordingDuration < 0.18 {
             sessionState = .idle
             overlayController.showShortHoldWarning()
             return
         }
+
+        overlayController.showLoading()
 
         transcriptionTask?.cancel()
         transcriptionTask = Task { [weak self] in
@@ -347,6 +348,7 @@ final class AppState: ObservableObject {
                 if preprocessing.analysis.profile == .mostlySilent {
                     await MainActor.run {
                         sessionState = .idle
+                        overlayController.hideRecorder()
                     }
                     return
                 }
@@ -358,6 +360,7 @@ final class AppState: ObservableObject {
                 if normalizedTranscript.isEmpty {
                     await MainActor.run {
                         sessionState = .idle
+                        overlayController.hideRecorder()
                     }
                     return
                 }
