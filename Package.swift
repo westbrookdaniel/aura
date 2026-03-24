@@ -15,10 +15,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Listener",
-            path: "Sources/Listener",
-            resources: [
-                .process("Resources")
-            ]
+            path: "Sources/Listener"
         ),
         .testTarget(
             name: "ListenerTests",

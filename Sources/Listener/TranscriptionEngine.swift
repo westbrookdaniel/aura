@@ -3,12 +3,9 @@ import Foundation
 protocol TranscriptionEngine: Sendable {
     func prepare(configuration: TranscriptionConfiguration) async throws
     func transcribe(audioURL: URL, configuration: TranscriptionConfiguration) async throws -> TranscriptionResult
-    func teardownIfIdle(after seconds: TimeInterval) async throws
 }
 
 actor WhisperCLITranscriptionEngine: TranscriptionEngine {
-    private var lastUseDate: Date?
-
     func prepare(configuration: TranscriptionConfiguration) async throws {
         let binaryPath = NSString(string: configuration.whisperBinaryPath).expandingTildeInPath
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else {
@@ -29,19 +26,15 @@ actor WhisperCLITranscriptionEngine: TranscriptionEngine {
         let outputBase = outputDirectory.appendingPathComponent("transcript")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binaryPath)
-        var arguments = [
+        let arguments = [
             "-m", modelPath,
             "-f", audioURL.path,
-            "-bs", String(configuration.beamSize),
-            "-bo", String(configuration.bestOf),
-            "-nth", String(configuration.noSpeechThreshold),
+            "-l", "en",
+            "-ng",
             "-otxt",
             "-of", outputBase.path,
             "-np"
         ]
-        if configuration.promptTerms.isEmpty == false {
-            arguments.append(contentsOf: ["--prompt", configuration.promptTerms.joined(separator: ", ")])
-        }
         process.arguments = arguments
 
         let errorPipe = Pipe()
@@ -73,18 +66,7 @@ actor WhisperCLITranscriptionEngine: TranscriptionEngine {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "No transcript file was produced."
             throw WhisperEngineError.transcriptionOutputMissing(stderr)
         }
-
-        lastUseDate = Date()
         return TranscriptionResult(text: transcript, analysis: nil)
-    }
-
-    func teardownIfIdle(after seconds: TimeInterval) async throws {
-        guard seconds > 0 else { return }
-        try await Task.sleep(for: .seconds(seconds))
-        guard let lastUseDate else { return }
-        if Date().timeIntervalSince(lastUseDate) >= seconds {
-            self.lastUseDate = nil
-        }
     }
 }
 

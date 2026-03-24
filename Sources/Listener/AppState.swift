@@ -11,8 +11,8 @@ final class AppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var isSettingsPresented = false
     @Published var isLaunchAtLoginEnabled = false
+    @Published var recorderSetupState: InstallProgressState = .idle
     @Published var whisperSetupState: InstallProgressState = .idle
-    @Published var accuracyVocabularyText: String = ""
     @Published var availableMicrophones: [MicrophoneDevice] = []
 
     let preferences: AppPreferencesStore
@@ -22,7 +22,6 @@ final class AppState: ObservableObject {
     let audioRecorder: AudioRecorder
     let transcriptionEngine: TranscriptionEngine
     let insertionService: TextInsertionService
-    let vocabularyStore: VocabularyStore
 
     private var cancellables = Set<AnyCancellable>()
     private var activeRecordingURL: URL?
@@ -36,8 +35,7 @@ final class AppState: ObservableObject {
         overlayController: OverlayPanelController = OverlayPanelController(),
         audioRecorder: AudioRecorder = AudioRecorder(),
         transcriptionEngine: TranscriptionEngine = WhisperCLITranscriptionEngine(),
-        insertionService: TextInsertionService = AccessibilityTextInsertionService(),
-        vocabularyStore: VocabularyStore = VocabularyStore()
+        insertionService: TextInsertionService = AccessibilityTextInsertionService()
     ) {
         self.preferences = preferences
         self.permissionsManager = permissionsManager
@@ -46,8 +44,6 @@ final class AppState: ObservableObject {
         self.audioRecorder = audioRecorder
         self.transcriptionEngine = transcriptionEngine
         self.insertionService = insertionService
-        self.vocabularyStore = vocabularyStore
-        self.accuracyVocabularyText = vocabularyStore.customTermsText
 
         bind()
     }
@@ -87,12 +83,24 @@ final class AppState: ObservableObject {
         preferences.whisperBinaryPath = path
     }
 
-    func updateModelPath(_ path: String) {
-        preferences.modelPath = path
-    }
-
-    func updateIdleTimeout(_ timeout: TimeInterval) {
-        preferences.workerIdleTimeout = timeout
+    func downloadRecorderSetup() {
+        Task {
+            do {
+                await MainActor.run {
+                    recorderSetupState = .working("Installing SoX with Homebrew…")
+                }
+                let path = try await WhisperInstallService.installSox()
+                await MainActor.run {
+                    preferences.soxBinaryPath = path
+                    recorderSetupState = .success("SoX is ready")
+                }
+            } catch {
+                await MainActor.run {
+                    recorderSetupState = .failure(error.localizedDescription)
+                    reportError(error.localizedDescription)
+                }
+            }
+        }
     }
 
     func refreshMicrophones() {
@@ -147,8 +155,6 @@ final class AppState: ObservableObject {
     }
 
     func downloadWhisperSetup() {
-        let selection: WhisperModelSelection = .baseEn
-        preferences.modelSelection = selection
         Task {
             do {
                 let binaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
@@ -165,7 +171,7 @@ final class AppState: ObservableObject {
                 await MainActor.run {
                     whisperSetupState = .working("Downloading Base English…")
                 }
-                let path = try await WhisperInstallService.downloadModel(selection: selection)
+                let path = try await WhisperInstallService.downloadBaseModel()
                 await MainActor.run {
                     preferences.modelPath = path
                     whisperSetupState = .success("Base English is ready")
@@ -189,52 +195,18 @@ final class AppState: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
-    func revealModelFile() {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: NSString(string: preferences.modelPath).expandingTildeInPath)])
+    func revealRecorderFiles() {
+        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: soxBinaryPath) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: soxBinaryPath)])
+    }
+
+    func openTranscriptionsFolder() {
+        NSWorkspace.shared.open(FileManager.default.temporaryDirectory)
     }
 
     func clearError() {
         lastErrorMessage = nil
-    }
-
-    func updateAccuracyVocabularyText(_ text: String) {
-        vocabularyStore.customTermsText = text
-        accuracyVocabularyText = text
-    }
-
-    func resetAccuracyVocabulary() {
-        vocabularyStore.resetCustomTerms()
-        accuracyVocabularyText = vocabularyStore.customTermsText
-    }
-
-    func importAccuracyVocabulary() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try self?.vocabularyStore.importTerms(from: url)
-                self?.accuracyVocabularyText = self?.vocabularyStore.customTermsText ?? ""
-            } catch {
-                self?.reportError("Could not import vocabulary: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    func exportAccuracyVocabulary() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "listener-vocabulary.txt"
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try self?.vocabularyStore.exportTerms(to: url)
-            } catch {
-                self?.reportError("Could not export vocabulary: \(error.localizedDescription)")
-            }
-        }
     }
 
     func openSettingsWindow() {
@@ -245,14 +217,6 @@ final class AppState: ObservableObject {
         preferences.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
-        vocabularyStore.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.accuracyVocabularyText = self?.vocabularyStore.customTermsText ?? ""
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -283,15 +247,21 @@ final class AppState: ObservableObject {
     }
 
     private func refreshInstallStatus() {
-        preferences.modelSelection = .baseEn
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let binaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-        let hasCLI = FileManager.default.isExecutableFile(atPath: binaryPath)
+        let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
+        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
+        let hasCLI = FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
         let hasModel = FileManager.default.fileExists(atPath: modelPath)
+        let hasSox = FileManager.default.isExecutableFile(atPath: soxBinaryPath)
 
         if case .working = whisperSetupState {
         } else {
             whisperSetupState = hasCLI && hasModel ? .success("Base English is ready") : .idle
+        }
+
+        if case .working = recorderSetupState {
+        } else {
+            recorderSetupState = hasSox ? .success("SoX is ready") : .idle
         }
     }
 
@@ -313,7 +283,12 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let fileURL = try audioRecorder.startRecording(preferredDeviceID: preferences.selectedMicrophoneID)
+            let preferredMicrophoneName = preferences.selectedMicrophoneID.flatMap(AudioDeviceManager.inputDeviceName(for:))
+            let fileURL = try audioRecorder.startRecording(
+                soxBinaryPath: preferences.soxBinaryPath,
+                preferredDeviceID: preferences.selectedMicrophoneID,
+                preferredDeviceName: preferredMicrophoneName
+            )
             activeRecordingURL = fileURL
             recordingStartedAt = Date()
             sessionState = .recording
@@ -353,7 +328,7 @@ final class AppState: ObservableObject {
             do {
                 let preprocessing = try AudioPreprocessor.preprocess(
                     audioURL: fileURL,
-                    configuration: preferences.transcriptionConfiguration.preprocessing
+                    configuration: AudioPreprocessingConfiguration()
                 )
                 if preprocessing.analysis.profile == .mostlySilent {
                     await MainActor.run {
@@ -375,14 +350,10 @@ final class AppState: ObservableObject {
                 await MainActor.run {
                     lastTranscript = normalizedTranscript
                 }
-                let corrected = TranscriptPostProcessor.process(normalizedTranscript, vocabulary: vocabularyStore.allTerms)
-                try await insertTranscript(corrected)
+                try await insertTranscript(normalizedTranscript)
                 await MainActor.run {
                     sessionState = .idle
                     overlayController.hideRecorder()
-                }
-                Task.detached { [transcriptionEngine, idleTimeout = preferences.workerIdleTimeout] in
-                    try? await transcriptionEngine.teardownIfIdle(after: idleTimeout)
                 }
             } catch {
                 if shouldIgnoreTranscriptionFailure(error) {
@@ -434,9 +405,7 @@ final class AppState: ObservableObject {
     }
 
     private func makeTranscriptionConfiguration() -> TranscriptionConfiguration {
-        var configuration = preferences.transcriptionConfiguration
-        configuration.promptTerms = []
-        return configuration
+        preferences.transcriptionConfiguration
     }
 
     private func shouldIgnoreTranscriptionFailure(_ error: Error) -> Bool {

@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
@@ -6,160 +7,156 @@ struct SettingsView: View {
     @State private var isCapturingShortcut = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let error = appState.lastErrorMessage, !error.isEmpty {
-                    SettingsWarningCard(
-                        title: "Warning",
-                        message: error,
-                        dismiss: { appState.clearError() }
-                    )
-                }
+        VStack(spacing: 0) {
+            SettingsHeaderView()
 
-                SettingsCard(title: "Shortcut") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("Shortcut", selection: presetShortcutBinding) {
-                            ForEach(ShortcutPreset.allCases) { preset in
-                                Text(preset.label).tag(preset)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let error = appState.lastErrorMessage, !error.isEmpty {
+                        SettingsWarningCard(
+                            title: "Warning",
+                            message: error,
+                            dismiss: { appState.clearError() }
+                        )
+                    }
+
+                    SettingsCard(title: "Shortcut") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker("Shortcut", selection: presetShortcutBinding) {
+                                ForEach(ShortcutPreset.allCases) { preset in
+                                    Text(preset.label).tag(preset)
+                                }
+                            }
+
+                            Text(presetSubtitle(ShortcutPreset(from: appState.preferences.shortcut)))
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+
+                            if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
+                                HStack {
+                                    Text("Current")
+                                    Spacer()
+                                    Text(appState.preferences.shortcut.displayName)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                ShortcutCaptureButton(
+                                    isCapturing: $isCapturingShortcut,
+                                    currentTitle: appState.preferences.shortcut.displayName
+                                ) { shortcut in
+                                    appState.updateShortcut(shortcut)
+                                    isCapturingShortcut = false
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsCard(title: "Permissions") {
+                        PermissionRow(
+                            title: "Microphone",
+                            status: appState.permissionState.microphone.rawValue,
+                            primaryAction: { Task { await appState.requestMicrophonePermission() } },
+                            secondaryAction: { appState.openAccessibilitySettings() },
+                            primaryTitle: "Request",
+                            secondaryTitle: "System Settings"
+                        )
+
+                        PermissionRow(
+                            title: "Accessibility",
+                            status: appState.permissionState.accessibility.rawValue,
+                            primaryAction: { appState.requestAccessibilityPermission() },
+                            secondaryAction: { appState.openAccessibilitySettings() },
+                            primaryTitle: "Prompt",
+                            secondaryTitle: "System Settings"
+                        )
+
+                        PermissionInfoRow(
+                            title: "Input Monitoring",
+                            status: appState.permissionState.inputMonitoring.rawValue,
+                            action: { appState.openInputMonitoringSettings() },
+                            actionTitle: "System Settings"
+                        )
+
+                        Text("If Listener is running from Terminal or `swift run`, macOS may show Terminal in Privacy settings until the app is packaged as its own app bundle.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    SettingsCard(title: "Audio") {
+                        Picker("Microphone", selection: microphoneSelectionBinding) {
+                            Text("System Default").tag(Optional<UInt32>.none)
+                            ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
+                                Text(microphone.displayName).tag(Optional(microphone.stableID))
                             }
                         }
 
-                        Text(presetSubtitle(ShortcutPreset(from: appState.preferences.shortcut)))
+                        Text("Pick a specific input device, or leave Listener on the macOS default microphone.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
 
-                        if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
-                            HStack {
-                                Text("Current")
-                                Spacer()
-                                Text(appState.preferences.shortcut.displayName)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            ShortcutCaptureButton(
-                                isCapturing: $isCapturingShortcut,
-                                currentTitle: appState.preferences.shortcut.displayName
-                            ) { shortcut in
-                                appState.updateShortcut(shortcut)
-                                isCapturingShortcut = false
-                            }
-                        }
-                    }
-                }
-
-                SettingsCard(title: "Permissions") {
-                    PermissionRow(
-                        title: "Microphone",
-                        status: appState.permissionState.microphone.rawValue,
-                        primaryAction: { Task { await appState.requestMicrophonePermission() } },
-                        secondaryAction: { appState.openAccessibilitySettings() },
-                        primaryTitle: "Request",
-                        secondaryTitle: "System Settings"
-                    )
-
-                    PermissionRow(
-                        title: "Accessibility",
-                        status: appState.permissionState.accessibility.rawValue,
-                        primaryAction: { appState.requestAccessibilityPermission() },
-                        secondaryAction: { appState.openAccessibilitySettings() },
-                        primaryTitle: "Prompt",
-                        secondaryTitle: "System Settings"
-                    )
-
-                    PermissionInfoRow(
-                        title: "Input Monitoring",
-                        status: appState.permissionState.inputMonitoring.rawValue,
-                        action: { appState.openInputMonitoringSettings() },
-                        actionTitle: "System Settings"
-                    )
-
-                    Text("If Listener is running from Terminal or `swift run`, macOS may show Terminal in Privacy settings until the app is packaged as its own app bundle.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-
-                SettingsCard(title: "Audio") {
-                    Picker("Microphone", selection: microphoneSelectionBinding) {
-                        Text("System Default").tag(Optional<UInt32>.none)
-                        ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
-                            Text(microphone.displayName).tag(Optional(microphone.stableID))
+                        HStack {
+                            Button("Refresh", action: appState.refreshMicrophones)
+                                .buttonStyle(.bordered)
                         }
                     }
 
-                    Text("Pick a specific input device, or leave Listener on the macOS default microphone.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    SettingsCard(title: "Recorder") {
+                        InstallStatusRow(
+                            title: "SoX",
+                            state: appState.recorderSetupState,
+                            primaryTitle: "Install",
+                            primaryAction: { appState.downloadRecorderSetup() },
+                            secondaryTitle: "Reveal",
+                            secondaryAction: { appState.revealRecorderFiles() }
+                        )
+
+                        Text("Listener records through SoX. If a specific mic does not behave properly, switch it back to System Default here first.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    SettingsCard(title: "Whisper") {
+                        InstallStatusRow(
+                            title: "Base English",
+                            state: appState.whisperSetupState,
+                            primaryTitle: "Download",
+                            primaryAction: { appState.downloadWhisperSetup() },
+                            secondaryTitle: "Reveal",
+                            secondaryAction: { appState.revealWhisperFiles() }
+                        )
+                    }
+                    SettingsCard(title: "System") {
+                        Toggle("Launch at login", isOn: Binding(
+                            get: { appState.isLaunchAtLoginEnabled },
+                            set: { appState.setLaunchAtLogin(enabled: $0) }
+                        ))
+                    }
 
                     HStack {
-                        Button("Refresh", action: appState.refreshMicrophones)
-                            .buttonStyle(.bordered)
+                        Spacer()
+
+                        Button(action: appState.openTranscriptionsFolder) {
+                            Label("Open Transcriptions Folder", systemImage: "waveform.badge.folder")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.black.opacity(0.04))
+                                )
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-
-                SettingsCard(title: "Whisper") {
-                    InstallStatusRow(
-                        title: "Base English",
-                        state: appState.whisperSetupState,
-                        primaryTitle: "Download",
-                        primaryAction: { appState.downloadWhisperSetup() },
-                        secondaryTitle: "Reveal",
-                        secondaryAction: { appState.revealWhisperFiles() }
-                    )
-
-                    Stepper(
-                        "Auto-unload after \(Int(appState.preferences.workerIdleTimeout))s",
-                        value: idleTimeoutBinding,
-                        in: 15...600,
-                        step: 15
-                    )
-                }
-
-                SettingsCard(title: "Accuracy") {
-                    Text("Quiet-speech enhancement runs automatically before transcription. Add custom coding, directory, and application terms below to improve recognition.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-
-                    Text("Custom Vocabulary")
-                        .font(.system(size: 14, weight: .semibold))
-
-                    TextEditor(text: Binding(
-                        get: { appState.accuracyVocabularyText },
-                        set: { appState.updateAccuracyVocabularyText($0) }
-                    ))
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: 140)
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.black.opacity(0.08))
-                    )
-
-                    HStack {
-                        Button("Import", action: appState.importAccuracyVocabulary)
-                            .buttonStyle(.bordered)
-                        Button("Export", action: appState.exportAccuracyVocabulary)
-                            .buttonStyle(.bordered)
-                        Button("Reset", action: appState.resetAccuracyVocabulary)
-                            .buttonStyle(.bordered)
-                    }
-                }
-                SettingsCard(title: "System") {
-                    Toggle("Launch at login", isOn: Binding(
-                        get: { appState.isLaunchAtLoginEnabled },
-                        set: { appState.setLaunchAtLogin(enabled: $0) }
-                    ))
-                }
+                .padding(24)
             }
-            .padding(20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    private var idleTimeoutBinding: Binding<Double> {
-        Binding(
-            get: { appState.preferences.workerIdleTimeout },
-            set: { appState.updateIdleTimeout($0) }
-        )
     }
 
     private var microphoneSelectionBinding: Binding<UInt32?> {
@@ -287,20 +284,31 @@ struct SettingsWarningCard: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.white)
                 .padding(10)
-                .background(Circle().fill(Color.orange.opacity(0.9)))
+                .background(Circle().fill(Color.red.opacity(0.9)))
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
-                Text(message)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+
+                ScrollView {
+                    Text(message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 120)
             }
 
             Spacer()
 
-            Button("Dismiss", action: dismiss)
-                .buttonStyle(.borderedProminent)
+            HStack(spacing: 8) {
+                Button("Copy", action: copyMessage)
+                    .buttonStyle(.bordered)
+
+                Button("Dismiss", action: dismiss)
+                    .buttonStyle(.borderedProminent)
+            }
         }
         .padding(18)
         .background(
@@ -308,8 +316,8 @@ struct SettingsWarningCard: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.orange.opacity(0.18),
-                            Color.red.opacity(0.08)
+                            Color.red.opacity(0.18),
+                            Color.red.opacity(0.10)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -317,9 +325,32 @@ struct SettingsWarningCard: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.orange.opacity(0.24), lineWidth: 1)
+                        .stroke(Color.red.opacity(0.28), lineWidth: 1)
                 )
         )
+    }
+
+    private func copyMessage() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(message, forType: .string)
+    }
+}
+
+struct SettingsHeaderView: View {
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.11, green: 0.14, blue: 0.20),
+                        Color(red: 0.16, green: 0.19, blue: 0.28)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(height: 56)
     }
 }
 

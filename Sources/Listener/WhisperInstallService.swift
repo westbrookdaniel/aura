@@ -17,6 +17,8 @@ enum InstallProgressState: Equatable {
 }
 
 enum WhisperInstallService {
+    static let baseEnglishFilename = "ggml-base.en.bin"
+
     static func installCLI() async throws -> String {
         let brewPath = try resolveBrewPath()
         try await runProcess(executable: brewPath, arguments: ["install", "whisper-cpp"])
@@ -41,12 +43,12 @@ enum WhisperInstallService {
         throw WhisperInstallError.cliNotFoundAfterInstall
     }
 
-    static func downloadModel(selection: WhisperModelSelection) async throws -> String {
-        let destination = try modelDestinationURL(for: selection)
+    static func downloadBaseModel() async throws -> String {
+        let destination = try modelDestinationURL()
         let parent = destination.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
 
-        let (temporaryURL, _) = try await URLSession.shared.download(from: selection.downloadURL)
+        let (temporaryURL, _) = try await URLSession.shared.download(from: downloadURL)
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
@@ -54,8 +56,32 @@ enum WhisperInstallService {
         return destination.path
     }
 
-    static func expectedModelPath(for selection: WhisperModelSelection) -> String {
-        (try? modelDestinationURL(for: selection).path) ?? ""
+    static func expectedModelPath() -> String {
+        (try? modelDestinationURL().path) ?? ""
+    }
+
+    static func installSox() async throws -> String {
+        let brewPath = try resolveBrewPath()
+        try await runProcess(executable: brewPath, arguments: ["install", "sox"])
+
+        let prefix = try await captureProcessOutput(executable: brewPath, arguments: ["--prefix", "sox"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = URL(fileURLWithPath: prefix).appendingPathComponent("bin/sox").path
+
+        if FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+
+        let fallbackPaths = [
+            "/opt/homebrew/bin/sox",
+            "/usr/local/bin/sox"
+        ]
+
+        if let fallback = fallbackPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fallback
+        }
+
+        throw WhisperInstallError.soxNotFoundAfterInstall
     }
 
     static func isCLIInstalled(at path: String) -> Bool {
@@ -66,14 +92,22 @@ enum WhisperInstallService {
         FileManager.default.fileExists(atPath: NSString(string: path).expandingTildeInPath)
     }
 
-    private static func modelDestinationURL(for selection: WhisperModelSelection) throws -> URL {
+    static func isSoxInstalled(at path: String) -> Bool {
+        FileManager.default.isExecutableFile(atPath: NSString(string: path).expandingTildeInPath)
+    }
+
+    private static func modelDestinationURL() throws -> URL {
         let appSupport = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         ).appendingPathComponent("Listener", isDirectory: true)
-        return appSupport.appendingPathComponent(selection.suggestedFilename)
+        return appSupport.appendingPathComponent(baseEnglishFilename)
+    }
+
+    private static var downloadURL: URL {
+        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseEnglishFilename)?download=true")!
     }
 
     private static func resolveBrewPath() throws -> String {
@@ -130,6 +164,7 @@ enum WhisperInstallService {
 enum WhisperInstallError: LocalizedError {
     case homebrewNotFound
     case cliNotFoundAfterInstall
+    case soxNotFoundAfterInstall
     case installFailed(String)
 
     var errorDescription: String? {
@@ -138,14 +173,10 @@ enum WhisperInstallError: LocalizedError {
             return "Homebrew was not found. Install Homebrew first, then try again."
         case .cliNotFoundAfterInstall:
             return "whisper-cpp installed, but Listener could not find whisper-cli afterwards."
+        case .soxNotFoundAfterInstall:
+            return "SoX installed, but Listener could not find the `sox` binary afterwards."
         case .installFailed(let message):
             return "Whisper install failed: \(message)"
         }
-    }
-}
-
-private extension WhisperModelSelection {
-    var downloadURL: URL {
-        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(suggestedFilename)?download=true")!
     }
 }

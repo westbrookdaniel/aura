@@ -8,8 +8,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private init() {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Listener Settings"
-        window.setContentSize(NSSize(width: 620, height: 560))
+        window.title = "Listener"
+        window.setContentSize(NSSize(width: 740, height: 720))
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -26,7 +26,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func show(appState: AppState) {
         let rootView = SettingsView()
             .environmentObject(appState)
-            .frame(width: 620, height: 560)
+            .frame(width: 740, height: 720)
         let hostingController = NSHostingController(rootView: AnyView(rootView))
         contentViewController = hostingController
         window?.makeKeyAndOrderFront(nil)

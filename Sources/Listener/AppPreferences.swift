@@ -9,16 +9,12 @@ final class AppPreferencesStore: ObservableObject {
         didSet { save(shortcut, key: Keys.shortcut) }
     }
 
-    @Published var modelSelection: WhisperModelSelection {
-        didSet { save(modelSelection, key: Keys.modelSelection) }
-    }
-
-    @Published var workerIdleTimeout: TimeInterval {
-        didSet { defaults.set(workerIdleTimeout, forKey: Keys.workerIdleTimeout) }
-    }
-
     @Published var whisperBinaryPath: String {
         didSet { defaults.set(whisperBinaryPath, forKey: Keys.whisperBinaryPath) }
+    }
+
+    @Published var soxBinaryPath: String {
+        didSet { defaults.set(soxBinaryPath, forKey: Keys.soxBinaryPath) }
     }
 
     @Published var modelPath: String {
@@ -38,13 +34,7 @@ final class AppPreferencesStore: ObservableObject {
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             whisperBinaryPath: whisperBinaryPath,
-            modelPath: modelPath,
-            modelSelection: modelSelection,
-            preprocessing: AudioPreprocessingConfiguration(),
-            promptTerms: [],
-            noSpeechThreshold: 0.70,
-            beamSize: 9,
-            bestOf: 9
+            modelPath: modelPath
         )
     }
 
@@ -52,19 +42,17 @@ final class AppPreferencesStore: ObservableObject {
 
     private enum Keys {
         static let shortcut = "shortcut"
-        static let modelSelection = "modelSelection"
-        static let workerIdleTimeout = "workerIdleTimeout"
         static let whisperBinaryPath = "whisperBinaryPath"
+        static let soxBinaryPath = "soxBinaryPath"
         static let modelPath = "modelPath"
         static let selectedMicrophoneID = "selectedMicrophoneID"
     }
 
     private init() {
         shortcut = Self.decode(Keys.shortcut) ?? .default
-        modelSelection = .baseEn
-        workerIdleTimeout = defaults.object(forKey: Keys.workerIdleTimeout) as? TimeInterval ?? 120
         whisperBinaryPath = defaults.string(forKey: Keys.whisperBinaryPath) ?? "/opt/homebrew/bin/whisper-cli"
-        modelPath = defaults.string(forKey: Keys.modelPath) ?? "~/Library/Application Support/Listener/\(WhisperModelSelection.baseEn.suggestedFilename)"
+        soxBinaryPath = defaults.string(forKey: Keys.soxBinaryPath) ?? "/opt/homebrew/bin/sox"
+        modelPath = defaults.string(forKey: Keys.modelPath) ?? WhisperInstallService.expectedModelPath()
         if defaults.object(forKey: Keys.selectedMicrophoneID) != nil {
             selectedMicrophoneID = UInt32(defaults.integer(forKey: Keys.selectedMicrophoneID))
         } else {

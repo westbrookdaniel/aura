@@ -3,16 +3,22 @@ import SwiftUI
 
 @MainActor
 final class OverlayPanelController {
+    private enum IndicatorState {
+        case recording
+        case error
+    }
+
     private var recorderPanel: NSPanel?
     private var recorderHostingView: NSHostingView<RecorderOverlayView>?
-    private var alertPanel: NSPanel?
-    private var alertHostingView: NSHostingView<AlertOverlayView>?
     private var alertDismissTask: Task<Void, Never>?
+    private var indicatorState: IndicatorState = .recording
+    private var currentLevel: CGFloat = 0.18
 
     func showRecorder(samples: [CGFloat]) {
         if recorderPanel == nil {
             createRecorderPanel()
         }
+        indicatorState = .recording
         updateRecorder(samples: samples)
         positionPanels()
         recorderPanel?.orderFrontRegardless()
@@ -20,45 +26,49 @@ final class OverlayPanelController {
 
     func updateRecorder(samples: [CGFloat]) {
         guard let recorderHostingView else { return }
-        recorderHostingView.rootView = RecorderOverlayView(samples: samples)
+        currentLevel = samples.isEmpty ? 0.18 : samples.reduce(0, +) / CGFloat(samples.count)
+        recorderHostingView.rootView = RecorderOverlayView(
+            state: indicatorState == .recording ? .recording : .error,
+            level: currentLevel
+        )
         positionPanels()
     }
 
     func hideRecorder() {
+        alertDismissTask?.cancel()
+        alertDismissTask = nil
         recorderPanel?.orderOut(nil)
     }
 
     func showAlert(message: String) {
-        if alertPanel == nil {
-            createAlertPanel()
+        if recorderPanel == nil {
+            createRecorderPanel()
         }
-        alertHostingView?.rootView = AlertOverlayView(message: message)
+        indicatorState = .error
+        recorderHostingView?.rootView = RecorderOverlayView(state: .error, level: 0)
         positionPanels()
-        alertPanel?.orderFrontRegardless()
+        recorderPanel?.orderFrontRegardless()
 
         alertDismissTask?.cancel()
         alertDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             await MainActor.run {
-                self?.hideAlert()
+                self?.hideRecorder()
             }
         }
     }
 
     func hideAlert() {
-        alertDismissTask?.cancel()
-        alertDismissTask = nil
-        alertPanel?.orderOut(nil)
+        hideRecorder()
     }
 
     func hideAll() {
         hideRecorder()
-        hideAlert()
     }
 
     private func createRecorderPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 196, height: 42),
+            contentRect: NSRect(x: 0, y: 0, width: 54, height: 54),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -68,40 +78,16 @@ final class OverlayPanelController {
         panel.isFloatingPanel = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.ignoresMouseEvents = true
 
-        let host = NSHostingView(rootView: RecorderOverlayView(samples: Array(repeating: 0, count: 24)))
+        let host = NSHostingView(rootView: RecorderOverlayView(state: .recording, level: 0.18))
         host.frame = panel.contentView?.bounds ?? .zero
         host.autoresizingMask = [.width, .height]
         panel.contentView = host
 
         self.recorderPanel = panel
         self.recorderHostingView = host
-    }
-
-    private func createAlertPanel() {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 68),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        panel.isFloatingPanel = true
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true
-
-        let host = NSHostingView(rootView: AlertOverlayView(message: ""))
-        host.frame = panel.contentView?.bounds ?? .zero
-        host.autoresizingMask = [.width, .height]
-        panel.contentView = host
-
-        self.alertPanel = panel
-        self.alertHostingView = host
     }
 
     private func positionPanels() {
@@ -112,16 +98,8 @@ final class OverlayPanelController {
             let width = recorderPanel.frame.width
             let height = recorderPanel.frame.height
             let x = frame.midX - (width / 2)
-            let y = frame.minY + 26
+            let y = frame.minY + 22
             recorderPanel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
-        }
-
-        if let alertPanel {
-            let width = alertPanel.frame.width
-            let height = alertPanel.frame.height
-            let x = frame.midX - (width / 2)
-            let y = frame.minY + 164
-            alertPanel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
         }
     }
 }

@@ -42,31 +42,6 @@ struct PermissionState: Equatable {
     )
 }
 
-enum WhisperModelSelection: String, CaseIterable, Codable, Identifiable {
-    case baseEn
-    case smallEn
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .baseEn:
-            return "Base English"
-        case .smallEn:
-            return "Small English"
-        }
-    }
-
-    var suggestedFilename: String {
-        switch self {
-        case .baseEn:
-            return "ggml-base.en.bin"
-        case .smallEn:
-            return "ggml-small.en.bin"
-        }
-    }
-}
-
 struct ShortcutSpec: Equatable, Codable {
     enum TriggerKey: String, CaseIterable, Codable, Identifiable {
         case fn
@@ -148,12 +123,11 @@ struct EventModifiers: OptionSet, Codable, Equatable {
 struct TranscriptionConfiguration: Equatable {
     var whisperBinaryPath: String
     var modelPath: String
-    var modelSelection: WhisperModelSelection
-    var preprocessing: AudioPreprocessingConfiguration
-    var promptTerms: [String]
-    var noSpeechThreshold: Float
-    var beamSize: Int
-    var bestOf: Int
+}
+
+struct TranscriptionResult: Equatable {
+    var text: String
+    var analysis: AudioAnalysisResult?
 }
 
 enum TextInsertionResult: Equatable {

@@ -4,9 +4,7 @@ import Foundation
 struct AudioPreprocessingConfiguration: Equatable, Codable {
     var targetPeakNormal: Float = 0.55
     var targetPeakQuiet: Float = 0.82
-    var silenceThreshold: Float = 0.012
-    var minLeadingTrimFrames: Int = 320
-    var minTrailingTrimFrames: Int = 320
+    var silenceThreshold: Float = 0.008
     var whisperRMSUpperBound: Float = 0.045
     var quietRMSUpperBound: Float = 0.09
 }
@@ -48,8 +46,7 @@ enum AudioPreprocessor {
             return PreprocessedAudioResult(fileURL: audioURL, analysis: analysis)
         }
 
-        let trimmed = trim(samples: samples, threshold: configuration.silenceThreshold, configuration: configuration)
-        let normalized = normalize(samples: trimmed, analysis: analysis, configuration: configuration)
+        let normalized = normalize(samples: samples, analysis: analysis, configuration: configuration)
 
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("listener-preprocessed-\(UUID().uuidString).wav")
         let pcmData = pcm16Data(from: normalized)
@@ -106,26 +103,6 @@ enum AudioPreprocessor {
             dynamicRange: dynamicRange,
             profile: profile
         )
-    }
-
-    private static func trim(samples: [Float], threshold: Float, configuration: AudioPreprocessingConfiguration) -> [Float] {
-        guard samples.isEmpty == false else { return samples }
-
-        var start = 0
-        while start < samples.count && abs(samples[start]) < threshold {
-            start += 1
-        }
-
-        var end = samples.count - 1
-        while end > start && abs(samples[end]) < threshold {
-            end -= 1
-        }
-
-        start = max(0, start - configuration.minLeadingTrimFrames)
-        end = min(samples.count - 1, end + configuration.minTrailingTrimFrames)
-
-        guard start <= end else { return samples }
-        return Array(samples[start...end])
     }
 
     private static func normalize(samples: [Float], analysis: AudioAnalysisResult, configuration: AudioPreprocessingConfiguration) -> [Float] {

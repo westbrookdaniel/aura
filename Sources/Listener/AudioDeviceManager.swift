@@ -51,6 +51,10 @@ enum AudioDeviceManager {
         return deviceID
     }
 
+    static func inputDeviceName(for deviceID: AudioDeviceID) -> String? {
+        deviceName(for: deviceID)
+    }
+
     private static func systemDeviceIDs() -> [AudioDeviceID] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -120,18 +124,20 @@ enum AudioDeviceManager {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var cfName: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize,
-            &cfName
-        )
+        var cfName: CFString?
+        var dataSize = UInt32(MemoryLayout<CFString?>.size)
+        let status = withUnsafeMutableBytes(of: &cfName) { rawBuffer in
+            AudioObjectGetPropertyData(
+                deviceID,
+                &propertyAddress,
+                0,
+                nil,
+                &dataSize,
+                rawBuffer.baseAddress!
+            )
+        }
 
-        guard status == noErr else { return nil }
+        guard status == noErr, let cfName else { return nil }
         return cfName as String
     }
 }
