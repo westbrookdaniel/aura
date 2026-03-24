@@ -435,7 +435,7 @@ final class AppState: ObservableObject {
 
     private func makeTranscriptionConfiguration() -> TranscriptionConfiguration {
         var configuration = preferences.transcriptionConfiguration
-        configuration.promptTerms = Array(vocabularyStore.allTerms.prefix(120))
+        configuration.promptTerms = []
         return configuration
     }
 

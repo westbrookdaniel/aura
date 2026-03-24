@@ -42,9 +42,9 @@ final class AppPreferencesStore: ObservableObject {
             modelSelection: modelSelection,
             preprocessing: AudioPreprocessingConfiguration(),
             promptTerms: [],
-            noSpeechThreshold: 0.45,
-            beamSize: 8,
-            bestOf: 8
+            noSpeechThreshold: 0.70,
+            beamSize: 9,
+            bestOf: 9
         )
     }
 

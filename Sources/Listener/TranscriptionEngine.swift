@@ -29,17 +29,20 @@ actor WhisperCLITranscriptionEngine: TranscriptionEngine {
         let outputBase = outputDirectory.appendingPathComponent("transcript")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binaryPath)
-        process.arguments = [
+        var arguments = [
             "-m", modelPath,
             "-f", audioURL.path,
             "-bs", String(configuration.beamSize),
             "-bo", String(configuration.bestOf),
             "-nth", String(configuration.noSpeechThreshold),
-            "--prompt", configuration.promptTerms.joined(separator: ", "),
             "-otxt",
             "-of", outputBase.path,
             "-np"
         ]
+        if configuration.promptTerms.isEmpty == false {
+            arguments.append(contentsOf: ["--prompt", configuration.promptTerms.joined(separator: ", ")])
+        }
+        process.arguments = arguments
 
         let errorPipe = Pipe()
         let outputPipe = Pipe()
