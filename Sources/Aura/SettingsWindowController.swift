@@ -9,7 +9,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Aura"
-        window.setContentSize(NSSize(width: 740, height: 720))
+        window.setContentSize(NSSize(width: 980, height: 760))
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -26,7 +26,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func show(appState: AppState) {
         let rootView = SettingsView()
             .environmentObject(appState)
-            .frame(width: 740, height: 720)
+            .frame(width: 980, height: 760)
         let hostingController = NSHostingController(rootView: AnyView(rootView))
         contentViewController = hostingController
         updateAppearance(appState.preferences.appearance.nsAppearance)

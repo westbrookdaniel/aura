@@ -15,6 +15,19 @@ extension AppAppearanceOption {
     }
 }
 
+extension OrbAppearanceOption {
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .inherit:
+            return nil
+        case .light:
+            return NSAppearance(named: .aqua)
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var sessionState: RecordingSessionState = .idle
@@ -69,6 +82,7 @@ final class AppState: ObservableObject {
         isLaunchAtLoginEnabled = LaunchAtLoginController.shared.isEnabled
         overlayController.updateAuraColor(preferences.auraColor)
         applyAppearance(preferences.appearance)
+        applyOverlayAppearance()
         shortcutMonitor.start(
             shortcut: preferences.shortcut,
             onPress: { [weak self] in
@@ -256,6 +270,10 @@ final class AppState: ObservableObject {
         preferences.clearVoiceTextHistory()
     }
 
+    func removeVoiceTextHistoryItem(id: UUID) {
+        preferences.removeVoiceTextHistoryItem(id: id)
+    }
+
     private func bind() {
         preferences.objectWillChange
             .receive(on: RunLoop.main)
@@ -298,13 +316,33 @@ final class AppState: ObservableObject {
                 self?.applyAppearance(appearance)
             }
             .store(in: &cancellables)
+
+        preferences.$orbAppearance
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyOverlayAppearance()
+            }
+            .store(in: &cancellables)
     }
 
     private func applyAppearance(_ appearance: AppAppearanceOption) {
         let nsAppearance = appearance.nsAppearance
         NSApp.appearance = nsAppearance
-        overlayController.updateAppearance(nsAppearance)
         SettingsWindowController.shared.updateAppearance(nsAppearance)
+        applyOverlayAppearance()
+    }
+
+    private func applyOverlayAppearance() {
+        let nsAppearance: NSAppearance?
+        switch preferences.orbAppearance {
+        case .inherit:
+            nsAppearance = preferences.appearance.nsAppearance
+        case .light, .dark:
+            nsAppearance = preferences.orbAppearance.nsAppearance
+        }
+
+        overlayController.updateAppearance(nsAppearance)
     }
 
     private func refreshPermissions() {
