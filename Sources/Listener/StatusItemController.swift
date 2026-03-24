@@ -1,10 +1,12 @@
 import AppKit
+import Combine
 
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let appState: AppState
     private let menu = NSMenu()
+    private var cancellables = Set<AnyCancellable>()
 
     init(appState: AppState) {
         self.appState = appState
@@ -12,13 +14,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         super.init()
         configureStatusItem()
         configureMenu()
+        bind()
     }
 
     private func configureStatusItem() {
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Listener")
+            let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Listener")
+            image?.isTemplate = true
+            button.image = image
             button.toolTip = "Listener"
             button.imagePosition = .imageOnly
+            button.appearance = nil
         }
         statusItem.menu = menu
     }
@@ -37,6 +43,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             action: #selector(quit),
             keyEquivalent: "q"
         ).configured(target: self))
+    }
+
+    private func bind() {
+        updateAppearance(appState.preferences.appearance.nsAppearance)
+
+        appState.preferences.$appearance
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] appearance in
+                self?.updateAppearance(appearance.nsAppearance)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateAppearance(_ appearance: NSAppearance?) {
+        menu.appearance = appearance
     }
 
     @objc private func openSettings() {

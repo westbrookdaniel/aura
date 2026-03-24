@@ -8,22 +8,31 @@ final class OverlayPanelController {
     private let loadingSettleDelay: Duration = .milliseconds(120)
 
     private enum IndicatorState {
-        case recording
-        case loading
-        case error
-        case warning(String)
+        case recording(isProcessing: Bool)
+        case alert(message: String, severity: RecorderOverlayView.AlertSeverity)
     }
 
     private var recorderPanel: NSPanel?
     private var recorderHostingView: NSHostingView<RecorderOverlayView>?
     private var alertDismissTask: Task<Void, Never>?
     private var loadingTask: Task<Void, Never>?
-    private var indicatorState: IndicatorState = .recording
+    private var indicatorState: IndicatorState = .recording(isProcessing: false)
     private var currentLevel: CGFloat = 0.18
-    private let visualState = RecorderOverlayVisualState(state: .recording, level: 0.18, auraColor: .aqua)
+    private let visualState = RecorderOverlayVisualState(
+        state: .recording(isProcessing: false),
+        level: 0.18,
+        auraColor: .aqua
+    )
+    private var currentAppearance: NSAppearance?
 
     func updateAuraColor(_ auraColor: AuraColorOption) {
         visualState.auraColor = auraColor
+    }
+
+    func updateAppearance(_ appearance: NSAppearance?) {
+        currentAppearance = appearance
+        recorderPanel?.appearance = appearance
+        recorderHostingView?.appearance = appearance
     }
 
     func showRecorder(samples: [CGFloat]) {
@@ -31,7 +40,7 @@ final class OverlayPanelController {
         if recorderPanel == nil {
             createRecorderPanel()
         }
-        indicatorState = .recording
+        indicatorState = .recording(isProcessing: false)
         updateRecorder(samples: samples)
         positionPanels()
         recorderPanel?.alphaValue = 1
@@ -43,14 +52,10 @@ final class OverlayPanelController {
         currentLevel = samples.isEmpty ? 0.18 : samples.reduce(0, +) / CGFloat(samples.count)
         let state: RecorderOverlayView.DisplayState
         switch indicatorState {
-        case .recording:
-            state = .recording
-        case .loading:
-            state = .loading
-        case .error:
-            state = .error
-        case .warning(let message):
-            state = .warning(message)
+        case .recording(let isProcessing):
+            state = .recording(isProcessing: isProcessing)
+        case .alert(let message, let severity):
+            state = .alert(message: message, severity: severity)
         }
         visualState.state = state
         visualState.level = currentLevel
@@ -63,22 +68,7 @@ final class OverlayPanelController {
     }
 
     func showAlert(message: String) {
-        cancelTransientTasks()
-        if recorderPanel == nil {
-            createRecorderPanel()
-        }
-        indicatorState = .error
-        visualState.state = .error
-        visualState.level = 0
-        positionPanels()
-        fadeInRecorder()
-
-        alertDismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
-            await MainActor.run {
-                self?.hideRecorder()
-            }
-        }
+        showAlert(message: message, severity: .error, dismissAfter: .seconds(2.5))
     }
 
     func showLoading() {
@@ -93,7 +83,7 @@ final class OverlayPanelController {
             try? await Task.sleep(for: self?.loadingDelay ?? .zero)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                self?.presentLoadingIfNeeded()
+                self?.presentProcessingIfNeeded()
             }
         }
     }
@@ -107,18 +97,26 @@ final class OverlayPanelController {
     }
 
     private func showWarning(message: String) {
+        showAlert(message: message, severity: .warning, dismissAfter: .seconds(2.2))
+    }
+
+    private func showAlert(
+        message: String,
+        severity: RecorderOverlayView.AlertSeverity,
+        dismissAfter duration: Duration
+    ) {
         cancelTransientTasks()
         if recorderPanel == nil {
             createRecorderPanel()
         }
-        indicatorState = .warning(message)
-        visualState.state = .warning(message)
+        indicatorState = .alert(message: message, severity: severity)
+        visualState.state = .alert(message: message, severity: severity)
         visualState.level = 0
         positionPanels()
         fadeInRecorder()
 
         alertDismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.2))
+            try? await Task.sleep(for: duration)
             await MainActor.run {
                 self?.hideRecorder()
             }
@@ -149,10 +147,12 @@ final class OverlayPanelController {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.alphaValue = 1
+        panel.appearance = currentAppearance
 
         let host = NSHostingView(rootView: RecorderOverlayView(visualState: visualState))
         host.frame = panel.contentView?.bounds ?? .zero
         host.autoresizingMask = [.width, .height]
+        host.appearance = currentAppearance
         panel.contentView = host
 
         self.recorderPanel = panel
@@ -180,13 +180,13 @@ final class OverlayPanelController {
         }
     }
 
-    private func presentLoadingIfNeeded() {
+    private func presentProcessingIfNeeded() {
         if recorderPanel == nil {
             createRecorderPanel()
         }
         guard let recorderPanel else { return }
-        indicatorState = .loading
-        visualState.state = .loading
+        indicatorState = .recording(isProcessing: true)
+        visualState.state = .recording(isProcessing: true)
         visualState.level = 0
         positionPanels()
         recorderPanel.orderFrontRegardless()

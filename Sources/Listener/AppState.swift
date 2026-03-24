@@ -2,6 +2,19 @@ import AppKit
 import Combine
 import Foundation
 
+extension AppAppearanceOption {
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return NSAppearance(named: .aqua)
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var sessionState: RecordingSessionState = .idle
@@ -55,6 +68,7 @@ final class AppState: ObservableObject {
         refreshMicrophones()
         isLaunchAtLoginEnabled = LaunchAtLoginController.shared.isEnabled
         overlayController.updateAuraColor(preferences.auraColor)
+        applyAppearance(preferences.appearance)
         shortcutMonitor.start(
             shortcut: preferences.shortcut,
             onPress: { [weak self] in
@@ -276,6 +290,21 @@ final class AppState: ObservableObject {
                 self?.overlayController.updateAuraColor(auraColor)
             }
             .store(in: &cancellables)
+
+        preferences.$appearance
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] appearance in
+                self?.applyAppearance(appearance)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyAppearance(_ appearance: AppAppearanceOption) {
+        let nsAppearance = appearance.nsAppearance
+        NSApp.appearance = nsAppearance
+        overlayController.updateAppearance(nsAppearance)
+        SettingsWindowController.shared.updateAppearance(nsAppearance)
     }
 
     private func refreshPermissions() {

@@ -8,7 +8,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SettingsHeaderView()
+            SettingsHeaderView(theme: theme)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -16,15 +16,16 @@ struct SettingsView: View {
                         SettingsWarningCard(
                             title: "Warning",
                             message: error,
+                            theme: theme,
                             dismiss: { appState.clearError() }
                         )
                     }
 
                     if appState.isSetupFlowPresented || !appState.isSetupComplete {
-                        SetupFlowCard(appState: appState)
+                        SetupFlowCard(appState: appState, theme: theme)
                     }
 
-                    SettingsCard {
+                    SettingsCard(theme: theme) {
                         VStack(alignment: .leading, spacing: 12) {
                             Picker("Shortcut", selection: presetShortcutBinding) {
                                 ForEach(ShortcutPreset.allCases) { preset in
@@ -46,7 +47,8 @@ struct SettingsView: View {
 
                                 ShortcutCaptureButton(
                                     isCapturing: $isCapturingShortcut,
-                                    currentTitle: appState.preferences.shortcut.displayName
+                                    currentTitle: appState.preferences.shortcut.displayName,
+                                    theme: theme
                                 ) { shortcut in
                                     appState.updateShortcut(shortcut)
                                     isCapturingShortcut = false
@@ -55,7 +57,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    SettingsCard {
+                    SettingsCard(theme: theme) {
                         Picker("Microphone", selection: microphoneSelectionBinding) {
                             Text(systemDefaultMicrophoneLabel).tag(Optional<UInt32>.none)
 
@@ -65,22 +67,30 @@ struct SettingsView: View {
                         }
                     }
 
-                    SettingsCard {
-                        Picker("Aura Color", selection: auraColorBinding) {
+                    SettingsCard(theme: theme) {
+                        Picker("Color Scheme", selection: auraColorBinding) {
                             ForEach(AuraColorOption.allCases) { option in
                                 Text(option.label).tag(option)
                             }
                         }
                     }
 
-                    SettingsCard {
+                    SettingsCard(theme: theme) {
+                        Picker("Appearance", selection: appearanceBinding) {
+                            ForEach(AppAppearanceOption.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    }
+
+                    SettingsCard(theme: theme) {
                         Toggle("Launch at login", isOn: Binding(
                             get: { appState.isLaunchAtLoginEnabled },
                             set: { appState.setLaunchAtLogin(enabled: $0) }
                         ))
                     }
 
-                    VoiceResponseHistoryCard(items: appState.preferences.voiceTextHistory)
+                    VoiceResponseHistoryCard(items: appState.preferences.voiceTextHistory, theme: theme)
 
                     HStack {
                         Spacer()
@@ -92,7 +102,7 @@ struct SettingsView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(SettingsSubtleGhostButtonStyle())
+                        .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
 
                         Button(action: appState.clearVoiceTextHistory) {
                             Label("Remove History", systemImage: "trash")
@@ -101,7 +111,7 @@ struct SettingsView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(SettingsSubtleGhostButtonStyle())
+                        .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
 
                         Button(action: appState.openTranscriptionsFolder) {
                             Label("Debug Transcriptions", systemImage: "folder")
@@ -110,13 +120,14 @@ struct SettingsView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(SettingsSubtleGhostButtonStyle())
+                        .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
                     }
                 }
                 .padding(24)
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .preferredColorScheme(preferredColorScheme)
     }
 
     private var microphoneSelectionBinding: Binding<UInt32?> {
@@ -139,6 +150,28 @@ struct SettingsView: View {
             get: { appState.preferences.auraColor },
             set: { appState.preferences.auraColor = $0 }
         )
+    }
+
+    private var appearanceBinding: Binding<AppAppearanceOption> {
+        Binding(
+            get: { appState.preferences.appearance },
+            set: { appState.preferences.appearance = $0 }
+        )
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appState.preferences.appearance {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
+    }
+
+    private var theme: AuraTheme {
+        appState.preferences.auraColor.theme
     }
 
     private var presetShortcutBinding: Binding<ShortcutPreset> {
@@ -182,11 +215,12 @@ struct SettingsView: View {
 
 struct VoiceResponseHistoryCard: View {
     let items: [VoiceTextHistoryItem]
+    let theme: AuraTheme
 
     private let maxCardHeight: CGFloat = 480
 
     var body: some View {
-        SettingsCard(contentPadding: 0) {
+        SettingsCard(theme: theme, contentPadding: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("History")
@@ -201,7 +235,7 @@ struct VoiceResponseHistoryCard: View {
                     } else {
                         LazyVStack(alignment: .leading, spacing: 10) {
                             ForEach(items) { item in
-                                VoiceResponseHistoryRow(item: item)
+                                VoiceResponseHistoryRow(item: item, theme: theme)
                             }
                         }
                     }
@@ -217,6 +251,9 @@ struct VoiceResponseHistoryCard: View {
 
 struct VoiceResponseHistoryRow: View {
     let item: VoiceTextHistoryItem
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var didCopy = false
 
@@ -234,7 +271,7 @@ struct VoiceResponseHistoryRow: View {
                         Color.clear
                         Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(didCopy ? Color.green.opacity(0.82) : .secondary)
+                            .foregroundStyle(copyIconColor)
                     }
                     .frame(width: 18, height: 18)
                 }
@@ -249,10 +286,10 @@ struct VoiceResponseHistoryRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
+                    .fill(theme.historyRowFill(for: colorScheme))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                            .stroke(theme.historyRowBorder(for: colorScheme), lineWidth: 1)
                     )
             )
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -262,6 +299,18 @@ struct VoiceResponseHistoryRow: View {
 
     private var timestamp: String {
         item.createdAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var copyIconColor: Color {
+        if didCopy {
+            return colorScheme == .dark
+                ? theme.success.foreground.color.opacity(0.94)
+                : theme.success.foreground.color.opacity(0.82)
+        }
+
+        return colorScheme == .dark
+            ? Color.white.opacity(0.68)
+            : Color.black.opacity(0.54)
     }
 
     private func copyText() {
@@ -313,11 +362,15 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 }
 
 struct SettingsCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let theme: AuraTheme
     let title: String?
     let contentPadding: CGFloat
     @ViewBuilder let content: Content
 
-    init(title: String? = nil, contentPadding: CGFloat = 18, @ViewBuilder content: () -> Content) {
+    init(theme: AuraTheme, title: String? = nil, contentPadding: CGFloat = 18, @ViewBuilder content: () -> Content) {
+        self.theme = theme
         self.title = title
         self.contentPadding = contentPadding
         self.content = content()
@@ -336,10 +389,14 @@ struct SettingsCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(theme.cardFill(for: colorScheme))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                        .fill(theme.cardTint(for: colorScheme))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(theme.cardBorder(for: colorScheme), lineWidth: 1)
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -347,8 +404,11 @@ struct SettingsCard<Content: View>: View {
 }
 
 struct SettingsWarningCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let title: String
     let message: String
+    let theme: AuraTheme
     let dismiss: () -> Void
 
     var body: some View {
@@ -356,11 +416,12 @@ struct SettingsWarningCard: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.white)
                 .padding(10)
-                .background(Circle().fill(Color.red.opacity(0.9)))
+                .background(Circle().fill(theme.warning.border.color))
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(theme.warning.foreground.color)
 
                 ScrollView {
                     Text(message)
@@ -376,28 +437,19 @@ struct SettingsWarningCard: View {
 
             HStack(spacing: 8) {
                 Button("Copy", action: copyMessage)
-                    .buttonStyle(SettingsReflectiveButtonStyle())
+                    .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
 
                 Button("Dismiss", action: dismiss)
-                    .buttonStyle(SettingsReflectiveButtonStyle())
+                    .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
             }
         }
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.red.opacity(0.18),
-                            Color.red.opacity(0.10)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(theme.warningCardBackground(for: colorScheme))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.red.opacity(0.28), lineWidth: 1)
+                        .stroke(theme.warningCardBorder(for: colorScheme), lineWidth: 1)
                 )
         )
     }
@@ -410,15 +462,20 @@ struct SettingsWarningCard: View {
 }
 
 struct SettingsHeaderView: View {
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Rectangle()
-            .fill(Color(nsColor: .separatorColor).opacity(0.7))
+            .fill(theme.divider(for: colorScheme))
             .frame(height: 1)
     }
 }
 
 struct SetupFlowCard: View {
     @ObservedObject var appState: AppState
+    let theme: AuraTheme
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -435,7 +492,8 @@ struct SetupFlowCard: View {
                     primaryAction: { Task { await appState.requestMicrophonePermission() } },
                     secondaryAction: { appState.openAccessibilitySettings() },
                     primaryTitle: "Request Microphone",
-                    secondaryTitle: "Go to System Settings"
+                    secondaryTitle: "Go to System Settings",
+                    theme: theme
                 )
 
                 SetupPermissionRow(
@@ -444,7 +502,8 @@ struct SetupFlowCard: View {
                     primaryAction: { appState.requestAccessibilityPermission() },
                     secondaryAction: { appState.openAccessibilitySettings() },
                     primaryTitle: "Prompt Accessibility",
-                    secondaryTitle: "Go to System Settings"
+                    secondaryTitle: "Go to System Settings",
+                    theme: theme
                 )
             }
 
@@ -460,7 +519,8 @@ struct SetupFlowCard: View {
                         primaryTitle: "Install SoX",
                         primaryAction: { appState.downloadRecorderSetup() },
                         secondaryTitle: "Reveal",
-                        secondaryAction: { appState.revealRecorderFiles() }
+                        secondaryAction: { appState.revealRecorderFiles() },
+                        theme: theme
                     )
 
                 SetupInstallRow(
@@ -469,7 +529,8 @@ struct SetupFlowCard: View {
                     primaryTitle: "Download Whisper Model (1.5 GB)",
                     primaryAction: { appState.downloadWhisperSetup() },
                     secondaryTitle: "Reveal",
-                    secondaryAction: { appState.revealWhisperFiles() }
+                    secondaryAction: { appState.revealWhisperFiles() },
+                    theme: theme
                 )
                 }
             }
@@ -492,27 +553,17 @@ struct SetupFlowCard: View {
     }
 
     private var backgroundGradient: [Color] {
-        if colorScheme == .dark {
-            return [
-                Color(red: 0.06, green: 0.12, blue: 0.21),
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .windowBackgroundColor),
-            ]
-        }
-
-        return [
-            Color(red: 0.89, green: 0.94, blue: 1.00),
-            Color.white,
-            Color(red: 0.97, green: 0.98, blue: 1.00)
-        ]
+        theme.setupGradient(for: colorScheme)
     }
 
     private var borderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.92)
+        theme.setupBorder(for: colorScheme)
     }
 }
 
 struct SettingsReflectiveButtonStyle: ButtonStyle {
+    let theme: AuraTheme
+
     @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
@@ -536,27 +587,25 @@ struct SettingsReflectiveButtonStyle: ButtonStyle {
     }
 
     private var labelColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.94) : Color.black.opacity(0.78)
+        theme.reflectiveButtonLabel(for: colorScheme)
     }
 
     private func backgroundColor(isPressed: Bool) -> Color {
-        if colorScheme == .dark {
-            return Color.white.opacity(isPressed ? 0.12 : 0.09)
-        }
-
-        return Color.white.opacity(isPressed ? 0.96 : 1.0)
+        theme.reflectiveButtonBackground(isPressed: isPressed, colorScheme: colorScheme)
     }
 
     private var primaryStrokeColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.95)
+        theme.reflectiveButtonPrimaryStroke(for: colorScheme)
     }
 
     private var secondaryStrokeColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.30) : Color.black.opacity(0.05)
+        theme.reflectiveButtonSecondaryStroke(for: colorScheme)
     }
 }
 
 struct SettingsSubtleGhostButtonStyle: ButtonStyle {
+    let theme: AuraTheme
+
     @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
@@ -578,27 +627,25 @@ struct SettingsSubtleGhostButtonStyle: ButtonStyle {
     }
 
     private var labelColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.82) : Color.secondary
+        theme.ghostButtonLabel(for: colorScheme)
     }
 
     private func backgroundColor(isPressed: Bool) -> Color {
-        if colorScheme == .dark {
-            return Color.white.opacity(isPressed ? 0.04 : 0.0)
-        }
-
-        return Color.white.opacity(isPressed ? 0.94 : 0.98)
+        theme.ghostButtonBackground(isPressed: isPressed, colorScheme: colorScheme)
     }
 
     private var primaryStrokeColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.92)
+        theme.ghostButtonPrimaryStroke(for: colorScheme)
     }
 
     private var secondaryStrokeColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.05)
+        theme.ghostButtonSecondaryStroke(for: colorScheme)
     }
 }
 
-struct SettingsPrimaryBlueButtonStyle: ButtonStyle {
+struct SettingsPrimaryButtonStyle: ButtonStyle {
+    let theme: AuraTheme
+
     @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
@@ -618,14 +665,11 @@ struct SettingsPrimaryBlueButtonStyle: ButtonStyle {
     }
 
     private func fillColor(isPressed: Bool) -> Color {
-        let base = colorScheme == .dark
-            ? Color(red: 0.28, green: 0.58, blue: 1.00)
-            : Color(red: 0.23, green: 0.53, blue: 0.98)
-        return base.opacity(isPressed ? 0.9 : 1)
+        theme.primaryButtonFill(isPressed: isPressed, colorScheme: colorScheme)
     }
 
     private var borderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.35)
+        theme.primaryButtonBorder(for: colorScheme)
     }
 }
 
@@ -636,16 +680,17 @@ struct SetupPermissionRow: View {
     let secondaryAction: () -> Void
     let primaryTitle: String
     let secondaryTitle: String
+    let theme: AuraTheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 Button(primaryTitle, systemImage: icon, action: primaryAction)
-                    .buttonStyle(SettingsPrimaryBlueButtonStyle())
+                    .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
                 Button(secondaryTitle, action: secondaryAction)
-                    .buttonStyle(SettingsReflectiveButtonStyle())
+                    .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
                 Spacer()
-                PermissionStatusBadge(status: status)
+                PermissionStatusBadge(status: status, theme: theme)
             }
         }
         .padding(.vertical, 4)
@@ -659,17 +704,18 @@ struct SetupInstallRow: View {
     let primaryAction: () -> Void
     let secondaryTitle: String
     let secondaryAction: () -> Void
+    let theme: AuraTheme
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Button(primaryTitle, systemImage: icon, action: primaryAction)
-                .buttonStyle(SettingsReflectiveButtonStyle())
+                .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
                 .disabled(isWorking)
             Button(secondaryTitle, action: secondaryAction)
-                .buttonStyle(SettingsReflectiveButtonStyle())
+                .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
 
             Spacer()
-            InstallStatusBadge(state: state)
+            InstallStatusBadge(state: state, theme: theme)
         }
         .padding(.vertical, 4)
     }
@@ -692,6 +738,7 @@ struct SetupInstallRow: View {
 
 struct PermissionStatusBadge: View {
     let status: PermissionAuthorization
+    let theme: AuraTheme
 
     var body: some View {
         Label(title, systemImage: icon)
@@ -728,32 +775,17 @@ struct PermissionStatusBadge: View {
     }
 
     private var backgroundColor: Color {
-        switch status {
-        case .granted:
-            return Color.green.opacity(0.16)
-        case .denied:
-            return Color.red.opacity(0.12)
-        case .notDetermined:
-            return Color.black.opacity(0.08)
-        }
+        theme.badgePalette(for: status).background.color
     }
 
     private var foregroundColor: Color {
-        switch status {
-        case .granted:
-            return Color.green.opacity(0.82)
-        case .denied:
-            return Color.red.opacity(0.82)
-        case .notDetermined:
-            return Color.black.opacity(0.65)
-        }
+        theme.badgePalette(for: status).foreground.color
     }
 }
 
 struct InstallStatusBadge: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     let state: InstallProgressState
+    let theme: AuraTheme
 
     var body: some View {
         HStack(spacing: 8) {
@@ -825,57 +857,41 @@ struct InstallStatusBadge: View {
     }
 
     private var backgroundColor: Color {
-        switch state {
-        case .success:
-            return Color.green.opacity(0.16)
-        case .failure:
-            return Color.red.opacity(0.12)
-        case .working:
-            return Color.blue.opacity(0.12)
-        case .idle:
-            if colorScheme == .dark {
-                return Color.white.opacity(0.07)
-            }
-            return Color.black.opacity(0.07)
-        }
+        theme.badgePalette(for: state).background.color
     }
 
     private var foregroundColor: Color {
-        switch state {
-        case .success:
-            return Color.green.opacity(0.82)
-        case .failure:
-            return Color.red.opacity(0.82)
-        case .working:
-            return Color.blue.opacity(0.82)
-        case .idle:
-            if colorScheme == .dark {
-                return Color.white.opacity(0.65)
-            }
-            return Color.black.opacity(0.65)
-        }
+        theme.badgePalette(for: state).foreground.color
     }
 }
 
 struct ShortcutCaptureButton: NSViewRepresentable {
     @Binding var isCapturing: Bool
     let currentTitle: String
+    let theme: AuraTheme
     let onCapture: (ShortcutSpec) -> Void
 
     func makeNSView(context: Context) -> NSButton {
         let button = NSButton(title: "Record Custom Shortcut", target: context.coordinator, action: #selector(Coordinator.toggleCapture))
         button.bezelStyle = .rounded
         context.coordinator.button = button
+        applyTheme(to: button)
         return button
     }
 
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.parent = self
         button.title = isCapturing ? "Press a shortcut…" : "Change Custom Shortcut"
+        applyTheme(to: button)
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
+    }
+
+    private func applyTheme(to button: NSButton) {
+        button.bezelColor = NSColor(theme.accentStrong.color)
+        button.contentTintColor = .white
     }
 
     @MainActor

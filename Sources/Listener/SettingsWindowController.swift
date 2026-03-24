@@ -29,9 +29,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             .frame(width: 740, height: 720)
         let hostingController = NSHostingController(rootView: AnyView(rootView))
         contentViewController = hostingController
+        updateAppearance(appState.preferences.appearance.nsAppearance)
         window?.makeKeyAndOrderFront(nil)
         window?.center()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func updateAppearance(_ appearance: NSAppearance?) {
+        window?.appearance = appearance
+        contentViewController?.view.appearance = appearance
     }
 
     func windowWillClose(_ notification: Notification) {

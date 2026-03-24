@@ -26,6 +26,25 @@ enum AuraColorOption: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum AppAppearanceOption: String, Codable, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system:
+            return "Match System"
+        case .light:
+            return "Always Light"
+        case .dark:
+            return "Always Dark"
+        }
+    }
+}
+
 @MainActor
 final class AppPreferencesStore: ObservableObject {
     static let shared = AppPreferencesStore()
@@ -64,6 +83,10 @@ final class AppPreferencesStore: ObservableObject {
         didSet { save(auraColor, key: Keys.auraColor) }
     }
 
+    @Published var appearance: AppAppearanceOption {
+        didSet { save(appearance, key: Keys.appearance) }
+    }
+
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             whisperBinaryPath: whisperBinaryPath,
@@ -82,6 +105,7 @@ final class AppPreferencesStore: ObservableObject {
         static let selectedMicrophoneID = "selectedMicrophoneID"
         static let voiceTextHistory = "voiceTextHistory"
         static let auraColor = "auraColor"
+        static let appearance = "appearance"
     }
 
     private static let maxVoiceTextHistoryCount = 200
@@ -105,6 +129,7 @@ final class AppPreferencesStore: ObservableObject {
         }
         voiceTextHistory = Self.decode(Keys.voiceTextHistory) ?? []
         auraColor = Self.decode(Keys.auraColor) ?? .aqua
+        appearance = Self.decode(Keys.appearance) ?? .light
     }
 
     func addVoiceTextHistoryItem(_ item: VoiceTextHistoryItem) {
