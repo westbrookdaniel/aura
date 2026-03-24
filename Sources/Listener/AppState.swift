@@ -28,6 +28,7 @@ final class AppState: ObservableObject {
     private var activeRecordingURL: URL?
     private var recordingStartedAt: Date?
     private var transcriptionTask: Task<Void, Never>?
+    private var activeRecordingSessionID = UUID()
 
     init(
         preferences: AppPreferencesStore = .shared,
@@ -53,6 +54,7 @@ final class AppState: ObservableObject {
         refreshPermissions()
         refreshMicrophones()
         isLaunchAtLoginEnabled = LaunchAtLoginController.shared.isEnabled
+        overlayController.updateAuraColor(preferences.auraColor)
         shortcutMonitor.start(
             shortcut: preferences.shortcut,
             onPress: { [weak self] in
@@ -114,10 +116,8 @@ final class AppState: ObservableObject {
 
         if let selectedID = preferences.selectedMicrophoneID {
             if devices.contains(where: { $0.stableID == selectedID }) == false {
-                preferences.selectedMicrophoneID = AudioDeviceManager.preferredBuiltInInputDeviceID(from: devices)
+                preferences.selectedMicrophoneID = nil
             }
-        } else {
-            preferences.selectedMicrophoneID = AudioDeviceManager.preferredBuiltInInputDeviceID(from: devices)
         }
     }
 
@@ -268,6 +268,14 @@ final class AppState: ObservableObject {
                 self?.shortcutMonitor.updateShortcut(shortcut)
             }
             .store(in: &cancellables)
+
+        preferences.$auraColor
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] auraColor in
+                self?.overlayController.updateAuraColor(auraColor)
+            }
+            .store(in: &cancellables)
     }
 
     private func refreshPermissions() {
@@ -322,6 +330,7 @@ final class AppState: ObservableObject {
                 preferredDeviceID: preferences.selectedMicrophoneID,
                 preferredDeviceName: preferredMicrophoneName
             )
+            activeRecordingSessionID = UUID()
             activeRecordingURL = fileURL
             recordingStartedAt = Date()
             sessionState = .recording
@@ -334,9 +343,17 @@ final class AppState: ObservableObject {
     private func finishRecording() async {
         guard sessionState == .recording else { return }
 
+        let sessionID = activeRecordingSessionID
+        let startedAt = recordingStartedAt ?? Date()
+        recordingStartedAt = nil
+        sessionState = .transcribing
+        overlayController.showLoading()
+
         let fileURL: URL
         do {
-            fileURL = try audioRecorder.stop()
+            fileURL = try await Task.detached(priority: .userInitiated) { [audioRecorder] in
+                try audioRecorder.stop()
+            }.value
         } catch {
             sessionState = .idle
             overlayController.hideRecorder()
@@ -344,18 +361,19 @@ final class AppState: ObservableObject {
             return
         }
 
+        guard sessionID == activeRecordingSessionID else {
+            overlayController.hideRecorder()
+            return
+        }
+
         activeRecordingURL = fileURL
-        let recordingDuration = Date().timeIntervalSince(recordingStartedAt ?? Date())
-        recordingStartedAt = nil
-        sessionState = .transcribing
+        let recordingDuration = Date().timeIntervalSince(startedAt)
 
         if recordingDuration < 0.18 {
             sessionState = .idle
             overlayController.showShortHoldWarning()
             return
         }
-
-        overlayController.showLoading()
 
         transcriptionTask?.cancel()
         transcriptionTask = Task { [weak self] in

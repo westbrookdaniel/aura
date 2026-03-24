@@ -57,11 +57,22 @@ struct SettingsView: View {
 
                     SettingsCard {
                         Picker("Microphone", selection: microphoneSelectionBinding) {
+                            Text(systemDefaultMicrophoneLabel).tag(Optional<UInt32>.none)
+
                             ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
                                 Text(microphone.displayName).tag(Optional(microphone.stableID))
                             }
                         }
                     }
+
+                    SettingsCard {
+                        Picker("Aura Color", selection: auraColorBinding) {
+                            ForEach(AuraColorOption.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    }
+
                     SettingsCard {
                         Toggle("Launch at login", isOn: Binding(
                             get: { appState.isLaunchAtLoginEnabled },
@@ -115,6 +126,21 @@ struct SettingsView: View {
         )
     }
 
+    private var systemDefaultMicrophoneLabel: String {
+        guard let microphone = appState.availableMicrophones.first(where: { $0.isDefault }) else {
+            return "System Default"
+        }
+
+        return "System Default (\(microphone.displayName))"
+    }
+
+    private var auraColorBinding: Binding<AuraColorOption> {
+        Binding(
+            get: { appState.preferences.auraColor },
+            set: { appState.preferences.auraColor = $0 }
+        )
+    }
+
     private var presetShortcutBinding: Binding<ShortcutPreset> {
         Binding(
             get: { ShortcutPreset(from: appState.preferences.shortcut) },
@@ -157,23 +183,34 @@ struct SettingsView: View {
 struct VoiceResponseHistoryCard: View {
     let items: [VoiceTextHistoryItem]
 
+    private let maxCardHeight: CGFloat = 480
+
     var body: some View {
-        SettingsCard(title: "History") {
-            VStack(alignment: .leading, spacing: 14) {
-                if items.isEmpty {
-                    Text("Your responses will appear here after you finish a dictation.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(items) { item in
-                            VoiceResponseHistoryRow(item: item)
+        SettingsCard(contentPadding: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("History")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+
+                    if items.isEmpty {
+                        Text("Your responses will appear here after you finish a dictation.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(items) { item in
+                                VoiceResponseHistoryRow(item: item)
+                            }
                         }
                     }
                 }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: maxCardHeight)
+            .clipped()
         }
     }
 }
@@ -277,10 +314,12 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 
 struct SettingsCard<Content: View>: View {
     let title: String?
+    let contentPadding: CGFloat
     @ViewBuilder let content: Content
 
-    init(title: String? = nil, @ViewBuilder content: () -> Content) {
+    init(title: String? = nil, contentPadding: CGFloat = 18, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.contentPadding = contentPadding
         self.content = content()
     }
 
@@ -293,16 +332,17 @@ struct SettingsCard<Content: View>: View {
 
             content
         }
-        .padding(18)
+        .padding(contentPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(.white.opacity(0.08), lineWidth: 1)
                 )
         )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 

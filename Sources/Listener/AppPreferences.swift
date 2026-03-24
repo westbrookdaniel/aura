@@ -1,6 +1,31 @@
 import Combine
 import Foundation
 
+enum AuraColorOption: String, Codable, CaseIterable, Identifiable {
+    case aqua
+    case olive
+    case magenta
+    case sand
+    case slate
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .aqua:
+            return "Aqua"
+        case .olive:
+            return "Olive"
+        case .magenta:
+            return "Magenta"
+        case .sand:
+            return "Sand"
+        case .slate:
+            return "Slate"
+        }
+    }
+}
+
 @MainActor
 final class AppPreferencesStore: ObservableObject {
     static let shared = AppPreferencesStore()
@@ -35,6 +60,10 @@ final class AppPreferencesStore: ObservableObject {
         didSet { save(voiceTextHistory, key: Keys.voiceTextHistory) }
     }
 
+    @Published var auraColor: AuraColorOption {
+        didSet { save(auraColor, key: Keys.auraColor) }
+    }
+
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             whisperBinaryPath: whisperBinaryPath,
@@ -52,6 +81,7 @@ final class AppPreferencesStore: ObservableObject {
         static let modelPath = "modelPath"
         static let selectedMicrophoneID = "selectedMicrophoneID"
         static let voiceTextHistory = "voiceTextHistory"
+        static let auraColor = "auraColor"
     }
 
     private static let maxVoiceTextHistoryCount = 200
@@ -74,6 +104,7 @@ final class AppPreferencesStore: ObservableObject {
             selectedMicrophoneID = nil
         }
         voiceTextHistory = Self.decode(Keys.voiceTextHistory) ?? []
+        auraColor = Self.decode(Keys.auraColor) ?? .aqua
     }
 
     func addVoiceTextHistoryItem(_ item: VoiceTextHistoryItem) {

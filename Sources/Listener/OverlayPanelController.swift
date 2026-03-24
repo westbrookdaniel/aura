@@ -5,6 +5,7 @@ import SwiftUI
 final class OverlayPanelController {
     private let fadeDuration: TimeInterval = 0.18
     private let loadingDelay: Duration = .milliseconds(500)
+    private let loadingSettleDelay: Duration = .milliseconds(120)
 
     private enum IndicatorState {
         case recording
@@ -19,6 +20,11 @@ final class OverlayPanelController {
     private var loadingTask: Task<Void, Never>?
     private var indicatorState: IndicatorState = .recording
     private var currentLevel: CGFloat = 0.18
+    private let visualState = RecorderOverlayVisualState(state: .recording, level: 0.18, auraColor: .aqua)
+
+    func updateAuraColor(_ auraColor: AuraColorOption) {
+        visualState.auraColor = auraColor
+    }
 
     func showRecorder(samples: [CGFloat]) {
         cancelTransientTasks()
@@ -33,9 +39,9 @@ final class OverlayPanelController {
     }
 
     func updateRecorder(samples: [CGFloat]) {
-        guard let recorderHostingView else { return }
+        guard recorderHostingView != nil else { return }
         currentLevel = samples.isEmpty ? 0.18 : samples.reduce(0, +) / CGFloat(samples.count)
-        let state: RecorderOverlayView.State
+        let state: RecorderOverlayView.DisplayState
         switch indicatorState {
         case .recording:
             state = .recording
@@ -46,10 +52,8 @@ final class OverlayPanelController {
         case .warning(let message):
             state = .warning(message)
         }
-        recorderHostingView.rootView = RecorderOverlayView(
-            state: state,
-            level: currentLevel
-        )
+        visualState.state = state
+        visualState.level = currentLevel
         positionPanels()
     }
 
@@ -64,7 +68,8 @@ final class OverlayPanelController {
             createRecorderPanel()
         }
         indicatorState = .error
-        recorderHostingView?.rootView = RecorderOverlayView(state: .error, level: 0)
+        visualState.state = .error
+        visualState.level = 0
         positionPanels()
         fadeInRecorder()
 
@@ -78,9 +83,13 @@ final class OverlayPanelController {
 
     func showLoading() {
         cancelTransientTasks()
-        fadeOutRecorder()
+        currentLevel = 0
+        if case .recording = indicatorState {
+            visualState.level = 0
+        }
 
         loadingTask = Task { [weak self] in
+            try? await Task.sleep(for: self?.loadingSettleDelay ?? .zero)
             try? await Task.sleep(for: self?.loadingDelay ?? .zero)
             guard !Task.isCancelled else { return }
             await MainActor.run {
@@ -103,11 +112,8 @@ final class OverlayPanelController {
             createRecorderPanel()
         }
         indicatorState = .warning(message)
-        recorderHostingView?.rootView = RecorderOverlayView(
-            state: .warning(message),
-            level: 0
-        )
-        resizeRecorderPanel(to: NSSize(width: 248, height: 44))
+        visualState.state = .warning(message)
+        visualState.level = 0
         positionPanels()
         fadeInRecorder()
 
@@ -128,8 +134,9 @@ final class OverlayPanelController {
     }
 
     private func createRecorderPanel() {
+        let initialSize = overlaySize(for: NSScreen.main ?? NSScreen.screens.first)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 54, height: 54),
+            contentRect: NSRect(x: 0, y: 0, width: initialSize.width, height: initialSize.height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -143,7 +150,7 @@ final class OverlayPanelController {
         panel.ignoresMouseEvents = true
         panel.alphaValue = 1
 
-        let host = NSHostingView(rootView: RecorderOverlayView(state: .recording, level: 0.18))
+        let host = NSHostingView(rootView: RecorderOverlayView(visualState: visualState))
         host.frame = panel.contentView?.bounds ?? .zero
         host.autoresizingMask = [.width, .height]
         panel.contentView = host
@@ -163,16 +170,12 @@ final class OverlayPanelController {
         guard let frame = screen?.visibleFrame else { return }
 
         if let recorderPanel {
-            switch indicatorState {
-            case .recording, .loading:
-                resizeRecorderPanel(to: NSSize(width: 54, height: 54))
-            case .error, .warning:
-                break
-            }
+            let overlaySize = overlaySize(for: screen)
+            resizeRecorderPanel(to: overlaySize)
             let width = recorderPanel.frame.width
             let height = recorderPanel.frame.height
-            let x = frame.midX - (width / 2)
-            let y = frame.minY + 22
+            let x = frame.minX
+            let y = frame.minY - (height * 0.25)
             recorderPanel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
         }
     }
@@ -183,12 +186,19 @@ final class OverlayPanelController {
         }
         guard let recorderPanel else { return }
         indicatorState = .loading
-        recorderHostingView?.rootView = RecorderOverlayView(state: .loading, level: 0)
-        resizeRecorderPanel(to: NSSize(width: 54, height: 54))
+        visualState.state = .loading
+        visualState.level = 0
         positionPanels()
-        recorderPanel.alphaValue = 0
         recorderPanel.orderFrontRegardless()
-        fadeInRecorder()
+        recorderPanel.alphaValue = 1
+    }
+
+    private func overlaySize(for screen: NSScreen?) -> NSSize {
+        guard let frame = screen?.visibleFrame else {
+            return NSSize(width: 1280, height: 420)
+        }
+
+        return NSSize(width: frame.width, height: max(frame.height * 0.5, 320))
     }
 
     private func fadeInRecorder() {

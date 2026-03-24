@@ -8,10 +8,12 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
 
     private let meteringEngine = AVAudioEngine()
     private let stateLock = NSLock()
+    private let levelProcessingLock = NSLock()
     private var recordingURL: URL?
     private var recordingProcess: Process?
     private var fallbackMeterTask: Task<Void, Never>?
     private var isRecording = false
+    private var recentPeak: Double = 0.12
 
     func startRecording(soxBinaryPath: String, preferredDeviceID: AudioDeviceID?, preferredDeviceName: String?) throws -> URL {
         guard !isRecording else { throw AudioRecorderError.alreadyRecording }
@@ -61,16 +63,18 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
     func stop() throws -> URL {
         guard isRecording, let recordingURL else { throw AudioRecorderError.notRecording }
 
+        isRecording = false
+
         stateLock.lock()
         let recordingProcess = self.recordingProcess
         self.recordingProcess = nil
+        self.recordingURL = nil
         stateLock.unlock()
+
+        stopMetering()
 
         recordingProcess?.interrupt()
         recordingProcess?.waitUntilExit()
-
-        isRecording = false
-        stopMetering()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.normalizedLevels = Array(repeating: 0, count: self.normalizedLevels.count)
@@ -153,12 +157,30 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
             for sample in samples[start..<end] {
                 peak = max(peak, abs(sample))
             }
-            levels.append(min(1, Double(peak)))
+            levels.append(Double(peak))
         }
+
+        let processedLevels = normalizeLevels(levels)
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.normalizedLevels = levels
+            self.normalizedLevels = processedLevels
+        }
+    }
+
+    private func normalizeLevels(_ levels: [Double]) -> [Double] {
+        levelProcessingLock.lock()
+        defer { levelProcessingLock.unlock() }
+
+        let peak = max(levels.max() ?? 0, 0.02)
+        recentPeak = max(peak, recentPeak * 0.92)
+        let normalizationBase = max(recentPeak, 0.06)
+        let gain = min(10.0, 0.9 / normalizationBase)
+
+        return levels.map { level in
+            let boosted = min(1, level * gain)
+            let curved = pow(boosted, 0.62)
+            return min(1, curved)
         }
     }
 
