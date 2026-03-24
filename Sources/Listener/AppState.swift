@@ -135,10 +135,6 @@ final class AppState: ObservableObject {
         permissionsManager.openAccessibilitySettings()
     }
 
-    func openInputMonitoringSettings() {
-        permissionsManager.openInputMonitoringSettings()
-    }
-
     func requestAccessibilityPermission() {
         permissionsManager.requestAccessibilityAccess()
         refreshPermissions()

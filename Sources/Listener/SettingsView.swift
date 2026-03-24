@@ -69,17 +69,6 @@ struct SettingsView: View {
                             primaryTitle: "Prompt",
                             secondaryTitle: "System Settings"
                         )
-
-                        PermissionInfoRow(
-                            title: "Input Monitoring",
-                            status: appState.permissionState.inputMonitoring.rawValue,
-                            action: { appState.openInputMonitoringSettings() },
-                            actionTitle: "System Settings"
-                        )
-
-                        Text("If Listener is running from Terminal or `swift run`, macOS may show Terminal in Privacy settings until the app is packaged as its own app bundle.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
                     }
 
                     SettingsCard(title: "Audio") {
@@ -136,7 +125,7 @@ struct SettingsView: View {
                         Spacer()
 
                         Button(action: appState.openTranscriptionsFolder) {
-                            Label("Open Transcriptions", systemImage: "folder")
+                            Label("Debug Transcriptions", systemImage: "folder")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
