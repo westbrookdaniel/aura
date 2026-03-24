@@ -31,6 +31,10 @@ final class AppPreferencesStore: ObservableObject {
         }
     }
 
+    @Published var voiceTextHistory: [VoiceTextHistoryItem] {
+        didSet { save(voiceTextHistory, key: Keys.voiceTextHistory) }
+    }
+
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             whisperBinaryPath: whisperBinaryPath,
@@ -47,7 +51,10 @@ final class AppPreferencesStore: ObservableObject {
         static let soxBinaryPath = "soxBinaryPath"
         static let modelPath = "modelPath"
         static let selectedMicrophoneID = "selectedMicrophoneID"
+        static let voiceTextHistory = "voiceTextHistory"
     }
+
+    private static let maxVoiceTextHistoryCount = 200
 
     private init() {
         shortcut = Self.decode(Keys.shortcut) ?? .default
@@ -66,6 +73,18 @@ final class AppPreferencesStore: ObservableObject {
         } else {
             selectedMicrophoneID = nil
         }
+        voiceTextHistory = Self.decode(Keys.voiceTextHistory) ?? []
+    }
+
+    func addVoiceTextHistoryItem(_ item: VoiceTextHistoryItem) {
+        voiceTextHistory.insert(item, at: 0)
+        if voiceTextHistory.count > Self.maxVoiceTextHistoryCount {
+            voiceTextHistory.removeLast(voiceTextHistory.count - Self.maxVoiceTextHistoryCount)
+        }
+    }
+
+    func clearVoiceTextHistory() {
+        voiceTextHistory = []
     }
 
     private func save<T: Encodable>(_ value: T, key: String) {

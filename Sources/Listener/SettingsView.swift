@@ -69,11 +69,22 @@ struct SettingsView: View {
                         ))
                     }
 
+                    VoiceResponseHistoryCard(items: appState.preferences.voiceTextHistory)
+
                     HStack {
                         Spacer()
 
                         Button(action: appState.reopenSetupFlow) {
                             Label("Redo Setup", systemImage: "gearshape")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(SettingsSubtleGhostButtonStyle())
+
+                        Button(action: appState.clearVoiceTextHistory) {
+                            Label("Remove History", systemImage: "trash")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
@@ -141,6 +152,88 @@ struct SettingsView: View {
         }
     }
 
+}
+
+struct VoiceResponseHistoryCard: View {
+    let items: [VoiceTextHistoryItem]
+
+    var body: some View {
+        SettingsCard(title: "History") {
+            VStack(alignment: .leading, spacing: 14) {
+                if items.isEmpty {
+                    Text("Your responses will appear here after you finish a dictation.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(items) { item in
+                            VoiceResponseHistoryRow(item: item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct VoiceResponseHistoryRow: View {
+    let item: VoiceTextHistoryItem
+
+    @State private var didCopy = false
+
+    var body: some View {
+        Button(action: copyText) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(timestamp)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(didCopy ? Color.green.opacity(0.82) : .secondary)
+                }
+
+                Text(item.text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.primary.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var timestamp: String {
+        item.createdAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func copyText() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(item.text, forType: .string)
+
+        didCopy = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            didCopy = false
+        }
+    }
 }
 
 enum ShortcutPreset: String, CaseIterable, Identifiable {

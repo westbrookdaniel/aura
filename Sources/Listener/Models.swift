@@ -127,6 +127,18 @@ struct TranscriptionResult: Equatable {
     var analysis: AudioAnalysisResult?
 }
 
+struct VoiceTextHistoryItem: Identifiable, Codable, Equatable {
+    var id: UUID
+    var text: String
+    var createdAt: Date
+
+    init(id: UUID = UUID(), text: String, createdAt: Date = Date()) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+    }
+}
+
 enum TextInsertionResult: Equatable {
     case paste
     case failed(String)

@@ -238,6 +238,10 @@ final class AppState: ObservableObject {
         isSetupFlowPresented = true
     }
 
+    func clearVoiceTextHistory() {
+        preferences.clearVoiceTextHistory()
+    }
+
     private func bind() {
         preferences.objectWillChange
             .receive(on: RunLoop.main)
@@ -382,6 +386,7 @@ final class AppState: ObservableObject {
                 }
                 await MainActor.run {
                     lastTranscript = normalizedTranscript
+                    preferences.addVoiceTextHistoryItem(VoiceTextHistoryItem(text: normalizedTranscript))
                 }
                 try await insertTranscript(normalizedTranscript)
                 await MainActor.run {
