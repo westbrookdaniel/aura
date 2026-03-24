@@ -22,6 +22,8 @@ struct AudioAnalysisResult: Equatable, Codable {
     var silenceRatio: Float
     var dynamicRange: Float
     var profile: AudioSpeechProfile
+    var leadingSilenceRatio: Float
+    var clippedStartLikely: Bool
 }
 
 struct PreprocessedAudioResult: Equatable {
@@ -72,7 +74,15 @@ enum AudioPreprocessor {
 
     private static func analyze(samples: [Float], configuration: AudioPreprocessingConfiguration) -> AudioAnalysisResult {
         guard samples.isEmpty == false else {
-            return AudioAnalysisResult(peak: 0, rms: 0, silenceRatio: 1, dynamicRange: 0, profile: .mostlySilent)
+            return AudioAnalysisResult(
+                peak: 0,
+                rms: 0,
+                silenceRatio: 1,
+                dynamicRange: 0,
+                profile: .mostlySilent,
+                leadingSilenceRatio: 1,
+                clippedStartLikely: false
+            )
         }
 
         let magnitudes = samples.map { abs($0) }
@@ -80,10 +90,16 @@ enum AudioPreprocessor {
         let rms = sqrt(magnitudes.reduce(0) { $0 + ($1 * $1) } / Float(magnitudes.count))
         let silenceCount = magnitudes.filter { $0 < configuration.silenceThreshold }.count
         let silenceRatio = Float(silenceCount) / Float(magnitudes.count)
+        let leadingWindowSize = min(magnitudes.count, 2_400)
+        let leadingWindow = Array(magnitudes.prefix(leadingWindowSize))
+        let leadingSilenceCount = leadingWindow.filter { $0 < configuration.silenceThreshold }.count
+        let leadingSilenceRatio = leadingWindow.isEmpty ? 1 : Float(leadingSilenceCount) / Float(leadingWindow.count)
         let sorted = magnitudes.sorted()
         let p95 = sorted[min(sorted.count - 1, Int(Float(sorted.count - 1) * 0.95))]
         let p20 = sorted[min(sorted.count - 1, Int(Float(sorted.count - 1) * 0.20))]
         let dynamicRange = max(0, p95 - p20)
+        let firstSpeechIndex = magnitudes.firstIndex { $0 >= configuration.silenceThreshold * 1.1 } ?? 0
+        let clippedStartLikely = leadingSilenceRatio < 0.08 && firstSpeechIndex < min(magnitudes.count, 540)
 
         let profile: AudioSpeechProfile
         if peak < configuration.silenceThreshold * 2 || rms < 0.006 {
@@ -101,7 +117,9 @@ enum AudioPreprocessor {
             rms: rms,
             silenceRatio: silenceRatio,
             dynamicRange: dynamicRange,
-            profile: profile
+            profile: profile,
+            leadingSilenceRatio: leadingSilenceRatio,
+            clippedStartLikely: clippedStartLikely
         )
     }
 

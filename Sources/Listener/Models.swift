@@ -45,7 +45,6 @@ struct PermissionState: Equatable {
 struct ShortcutSpec: Equatable, Codable {
     enum TriggerKey: String, CaseIterable, Codable, Identifiable {
         case fn
-        case optionFn
         case rightCommand
         case rightOption
         case customShortcut
@@ -58,7 +57,7 @@ struct ShortcutSpec: Equatable, Codable {
     var keyCode: UInt16?
     var keyDisplay: String?
 
-    static let `default` = ShortcutSpec(triggerKey: .optionFn, modifiers: [], keyCode: nil, keyDisplay: nil)
+    static let `default` = ShortcutSpec(triggerKey: .fn, modifiers: [], keyCode: nil, keyDisplay: nil)
     static let fnOnly = ShortcutSpec(triggerKey: .fn, modifiers: [], keyCode: nil, keyDisplay: nil)
     static let rightCommand = ShortcutSpec(triggerKey: .rightCommand, modifiers: [], keyCode: nil, keyDisplay: nil)
     static let rightOption = ShortcutSpec(triggerKey: .rightOption, modifiers: [], keyCode: nil, keyDisplay: nil)
@@ -72,8 +71,6 @@ struct ShortcutSpec: Equatable, Codable {
         switch triggerKey {
         case .fn:
             keyName = "Fn"
-        case .optionFn:
-            keyName = "Option + Fn"
         case .rightCommand:
             keyName = "Right Command"
         case .rightOption:
@@ -82,7 +79,7 @@ struct ShortcutSpec: Equatable, Codable {
             keyName = keyDisplay ?? "Custom Shortcut"
         }
 
-        if prefix.isEmpty || triggerKey == .optionFn {
+        if prefix.isEmpty {
             return keyName
         }
         return "\(prefix) + \(keyName)"
@@ -104,7 +101,7 @@ struct EventModifiers: OptionSet, Codable, Equatable {
     init(nsFlags: NSEvent.ModifierFlags, removingTriggerFor trigger: ShortcutSpec.TriggerKey) {
         var value: EventModifiers = []
         if nsFlags.contains(.command), trigger != .rightCommand { value.insert(.command) }
-        if nsFlags.contains(.option), trigger != .rightOption && trigger != .optionFn { value.insert(.option) }
+        if nsFlags.contains(.option), trigger != .rightOption { value.insert(.option) }
         if nsFlags.contains(.control) { value.insert(.control) }
         if nsFlags.contains(.shift) { value.insert(.shift) }
         self = value

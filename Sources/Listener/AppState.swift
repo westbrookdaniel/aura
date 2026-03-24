@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var isSettingsPresented = false
     @Published var isLaunchAtLoginEnabled = false
+    @Published var isSetupFlowPresented = false
     @Published var recorderSetupState: InstallProgressState = .idle
     @Published var whisperSetupState: InstallProgressState = .idle
     @Published var availableMicrophones: [MicrophoneDevice] = []
@@ -107,9 +108,12 @@ final class AppState: ObservableObject {
         let devices = AudioDeviceManager.availableInputDevices()
         availableMicrophones = devices
 
-        if let selectedID = preferences.selectedMicrophoneID,
-           devices.contains(where: { $0.stableID == selectedID }) == false {
-            preferences.selectedMicrophoneID = nil
+        if let selectedID = preferences.selectedMicrophoneID {
+            if devices.contains(where: { $0.stableID == selectedID }) == false {
+                preferences.selectedMicrophoneID = AudioDeviceManager.preferredBuiltInInputDeviceID(from: devices)
+            }
+        } else {
+            preferences.selectedMicrophoneID = AudioDeviceManager.preferredBuiltInInputDeviceID(from: devices)
         }
     }
 
@@ -206,7 +210,16 @@ final class AppState: ObservableObject {
     }
 
     func openSettingsWindow() {
+        refreshPermissions()
+        refreshMicrophones()
+        isSetupFlowPresented = !isSetupComplete
         SettingsWindowController.shared.show(appState: self)
+    }
+
+    func reopenSetupFlow() {
+        refreshPermissions()
+        refreshMicrophones()
+        isSetupFlowPresented = true
     }
 
     private func bind() {
@@ -258,6 +271,10 @@ final class AppState: ObservableObject {
         if case .working = recorderSetupState {
         } else {
             recorderSetupState = hasSox ? .success("SoX is ready") : .idle
+        }
+
+        if isSetupComplete == false {
+            isSetupFlowPresented = true
         }
     }
 
@@ -315,6 +332,7 @@ final class AppState: ObservableObject {
 
         if recordingDuration < 0.18 {
             sessionState = .idle
+            overlayController.showShortHoldWarning()
             return
         }
 
@@ -349,7 +367,11 @@ final class AppState: ObservableObject {
                 try await insertTranscript(normalizedTranscript)
                 await MainActor.run {
                     sessionState = .idle
-                    overlayController.hideRecorder()
+                    if preprocessing.analysis.clippedStartLikely {
+                        overlayController.showClippedStartWarning()
+                    } else {
+                        overlayController.hideRecorder()
+                    }
                 }
             } catch {
                 if shouldIgnoreTranscriptionFailure(error) {
@@ -419,6 +441,18 @@ final class AppState: ObservableObject {
         default:
             return false
         }
+    }
+
+    var isSetupComplete: Bool {
+        let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
+        let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
+        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
+
+        return permissionState.microphone == .granted
+            && permissionState.accessibility == .granted
+            && FileManager.default.isExecutableFile(atPath: soxBinaryPath)
+            && FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
+            && FileManager.default.fileExists(atPath: modelPath)
     }
 }
 

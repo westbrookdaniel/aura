@@ -20,7 +20,11 @@ struct SettingsView: View {
                         )
                     }
 
-                    SettingsCard(title: "Shortcut") {
+                    if appState.isSetupFlowPresented || !appState.isSetupComplete {
+                        SetupFlowCard(appState: appState)
+                    }
+
+                    SettingsCard {
                         VStack(alignment: .leading, spacing: 12) {
                             Picker("Shortcut", selection: presetShortcutBinding) {
                                 ForEach(ShortcutPreset.allCases) { preset in
@@ -51,70 +55,14 @@ struct SettingsView: View {
                         }
                     }
 
-                    SettingsCard(title: "Permissions") {
-                        PermissionRow(
-                            title: "Microphone",
-                            status: appState.permissionState.microphone.rawValue,
-                            primaryAction: { Task { await appState.requestMicrophonePermission() } },
-                            secondaryAction: { appState.openAccessibilitySettings() },
-                            primaryTitle: "Request",
-                            secondaryTitle: "System Settings"
-                        )
-
-                        PermissionRow(
-                            title: "Accessibility",
-                            status: appState.permissionState.accessibility.rawValue,
-                            primaryAction: { appState.requestAccessibilityPermission() },
-                            secondaryAction: { appState.openAccessibilitySettings() },
-                            primaryTitle: "Prompt",
-                            secondaryTitle: "System Settings"
-                        )
-                    }
-
-                    SettingsCard(title: "Audio") {
+                    SettingsCard {
                         Picker("Microphone", selection: microphoneSelectionBinding) {
-                            Text("System Default").tag(Optional<UInt32>.none)
                             ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
                                 Text(microphone.displayName).tag(Optional(microphone.stableID))
                             }
                         }
-
-                        Text("Pick a specific input device, or leave Listener on the macOS default microphone.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Button("Refresh", action: appState.refreshMicrophones)
-                                .buttonStyle(.bordered)
-                        }
                     }
-
-                    SettingsCard(title: "Recorder") {
-                        InstallStatusRow(
-                            title: "SoX",
-                            state: appState.recorderSetupState,
-                            primaryTitle: "Install",
-                            primaryAction: { appState.downloadRecorderSetup() },
-                            secondaryTitle: "Reveal",
-                            secondaryAction: { appState.revealRecorderFiles() }
-                        )
-
-                        Text("Listener records through SoX. If a specific mic does not behave properly, switch it back to System Default here first.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    SettingsCard(title: "Whisper") {
-                        InstallStatusRow(
-                            title: "Base English",
-                            state: appState.whisperSetupState,
-                            primaryTitle: "Download",
-                            primaryAction: { appState.downloadWhisperSetup() },
-                            secondaryTitle: "Reveal",
-                            secondaryAction: { appState.revealWhisperFiles() }
-                        )
-                    }
-                    SettingsCard(title: "System") {
+                    SettingsCard {
                         Toggle("Launch at login", isOn: Binding(
                             get: { appState.isLaunchAtLoginEnabled },
                             set: { appState.setLaunchAtLogin(enabled: $0) }
@@ -124,22 +72,23 @@ struct SettingsView: View {
                     HStack {
                         Spacer()
 
+                        Button(action: appState.reopenSetupFlow) {
+                            Label("Redo Setup", systemImage: "gearshape")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(SettingsSubtleGhostButtonStyle())
+
                         Button(action: appState.openTranscriptionsFolder) {
                             Label("Debug Transcriptions", systemImage: "folder")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(Color.black.opacity(0.04))
-                                )
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                                )
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SettingsSubtleGhostButtonStyle())
                     }
                 }
                 .padding(24)
@@ -160,9 +109,6 @@ struct SettingsView: View {
             get: { ShortcutPreset(from: appState.preferences.shortcut) },
             set: { preset in
                 switch preset {
-                case .optionFn:
-                    isCapturingShortcut = false
-                    appState.updateShortcut(.default)
                 case .fn:
                     isCapturingShortcut = false
                     appState.updateShortcut(.fnOnly)
@@ -184,10 +130,8 @@ struct SettingsView: View {
 
     private func presetSubtitle(_ preset: ShortcutPreset) -> String {
         switch preset {
-        case .optionFn:
-            return "Default. Harder to trigger by accident."
         case .fn:
-            return "Simplest hold-to-talk option."
+            return "Default. Simplest hold-to-talk option."
         case .rightCommand:
             return "Good fallback if Fn is unreliable."
         case .rightOption:
@@ -200,7 +144,6 @@ struct SettingsView: View {
 }
 
 enum ShortcutPreset: String, CaseIterable, Identifiable {
-    case optionFn
     case fn
     case rightCommand
     case rightOption
@@ -210,8 +153,6 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .optionFn:
-            return "Option + Fn"
         case .fn:
             return "Fn"
         case .rightCommand:
@@ -225,8 +166,6 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 
     init(from shortcut: ShortcutSpec) {
         switch shortcut.triggerKey {
-        case .optionFn:
-            self = .optionFn
         case .fn:
             self = .fn
         case .rightCommand:
@@ -240,13 +179,20 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
 }
 
 struct SettingsCard<Content: View>: View {
-    let title: String
+    let title: String?
     @ViewBuilder let content: Content
+
+    init(title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
+            if let title, title.isEmpty == false {
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+            }
 
             content
         }
@@ -293,10 +239,10 @@ struct SettingsWarningCard: View {
 
             HStack(spacing: 8) {
                 Button("Copy", action: copyMessage)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SettingsReflectiveButtonStyle())
 
                 Button("Dismiss", action: dismiss)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(SettingsReflectiveButtonStyle())
             }
         }
         .padding(18)
@@ -334,58 +280,167 @@ struct SettingsHeaderView: View {
     }
 }
 
-struct PermissionRow: View {
-    let title: String
-    let status: String
+struct SetupFlowCard: View {
+    @ObservedObject var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Lets get you setup")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                SetupPermissionRow(
+                    icon: "mic.fill",
+                    status: appState.permissionState.microphone,
+                    primaryAction: { Task { await appState.requestMicrophonePermission() } },
+                    secondaryAction: { appState.openAccessibilitySettings() },
+                    primaryTitle: "Request Microphone",
+                    secondaryTitle: "Go to System Settings"
+                )
+
+                SetupPermissionRow(
+                    icon: "figure.wave.circle.fill",
+                    status: appState.permissionState.accessibility,
+                    primaryAction: { appState.requestAccessibilityPermission() },
+                    secondaryAction: { appState.openAccessibilitySettings() },
+                    primaryTitle: "Prompt Accessibility",
+                    secondaryTitle: "Go to System Settings"
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("These will be installed via Homebrew")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    SetupInstallRow(
+                        icon: "waveform",
+                        state: appState.recorderSetupState,
+                        primaryTitle: "Install SoX",
+                        primaryAction: { appState.downloadRecorderSetup() },
+                        secondaryTitle: "Reveal",
+                        secondaryAction: { appState.revealRecorderFiles() }
+                    )
+
+                    SetupInstallRow(
+                        icon: "waveform.badge.magnifyingglass",
+                        state: appState.whisperSetupState,
+                        primaryTitle: "Download Whisper Model",
+                        primaryAction: { appState.downloadWhisperSetup() },
+                        secondaryTitle: "Reveal",
+                        secondaryAction: { appState.revealWhisperFiles() }
+                    )
+                }
+            }
+        }
+        .padding(22)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.89, green: 0.94, blue: 1.00),
+                            Color.white,
+                            Color(red: 0.97, green: 0.98, blue: 1.00)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.92), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct SettingsReflectiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.96 : 1.0))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.95), lineWidth: 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
+                    )
+            )
+            .opacity(configuration.isPressed ? 0.88 : 1)
+    }
+}
+
+struct SettingsSubtleGhostButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.94 : 0.98))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.white.opacity(0.92), lineWidth: 1)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
+                    )
+            )
+            .opacity(configuration.isPressed ? 0.84 : 1)
+    }
+}
+
+struct SettingsPrimaryBlueButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(red: 0.23, green: 0.53, blue: 0.98).opacity(configuration.isPressed ? 0.9 : 1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                    )
+            )
+            .opacity(configuration.isPressed ? 0.92 : 1)
+    }
+}
+
+struct SetupPermissionRow: View {
+    let icon: String
+    let status: PermissionAuthorization
     let primaryAction: () -> Void
     let secondaryAction: () -> Void
     let primaryTitle: String
     let secondaryTitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(status)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Button(primaryTitle, action: primaryAction)
-                    .buttonStyle(.borderedProminent)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Button(primaryTitle, systemImage: icon, action: primaryAction)
+                    .buttonStyle(SettingsPrimaryBlueButtonStyle())
                 Button(secondaryTitle, action: secondaryAction)
-                    .buttonStyle(.bordered)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-struct PermissionInfoRow: View {
-    let title: String
-    let status: String
-    let action: () -> Void
-    let actionTitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
+                    .buttonStyle(SettingsReflectiveButtonStyle())
                 Spacer()
-                Text(status)
-                    .foregroundStyle(.secondary)
+                PermissionStatusBadge(status: status)
             }
-
-            Button(actionTitle, action: action)
-                .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
     }
 }
 
-struct InstallStatusRow: View {
-    let title: String
+struct SetupInstallRow: View {
+    let icon: String
     let state: InstallProgressState
     let primaryTitle: String
     let primaryAction: () -> Void
@@ -393,21 +448,15 @@ struct InstallStatusRow: View {
     let secondaryAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(statusText)
-                    .foregroundStyle(statusColor)
-            }
+        HStack(alignment: .center, spacing: 12) {
+            Button(primaryTitle, systemImage: icon, action: primaryAction)
+                .buttonStyle(SettingsReflectiveButtonStyle())
+                .disabled(isWorking)
+            Button(secondaryTitle, action: secondaryAction)
+                .buttonStyle(SettingsReflectiveButtonStyle())
 
-            HStack {
-                Button(primaryTitle, action: primaryAction)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isWorking)
-                Button(secondaryTitle, action: secondaryAction)
-                    .buttonStyle(.bordered)
-            }
+            Spacer()
+            InstallStatusBadge(state: state)
         }
         .padding(.vertical, 4)
     }
@@ -426,16 +475,132 @@ struct InstallStatusRow: View {
         }
     }
 
-    private var statusColor: Color {
+}
+
+struct PermissionStatusBadge: View {
+    let status: PermissionAuthorization
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(backgroundColor)
+            )
+    }
+
+    private var title: String {
+        switch status {
+        case .granted:
+            return "Granted"
+        case .denied:
+            return "Needs Access"
+        case .notDetermined:
+            return "Pending"
+        }
+    }
+
+    private var icon: String {
+        switch status {
+        case .granted:
+            return "checkmark"
+        case .denied:
+            return "exclamationmark"
+        case .notDetermined:
+            return "clock"
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch status {
+        case .granted:
+            return Color.green.opacity(0.16)
+        case .denied:
+            return Color.red.opacity(0.12)
+        case .notDetermined:
+            return Color.black.opacity(0.08)
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch status {
+        case .granted:
+            return Color.green.opacity(0.82)
+        case .denied:
+            return Color.red.opacity(0.82)
+        case .notDetermined:
+            return Color.black.opacity(0.65)
+        }
+    }
+}
+
+struct InstallStatusBadge: View {
+    let state: InstallProgressState
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(backgroundColor)
+            )
+    }
+
+    private var title: String {
+        switch state {
+        case .idle:
+            return "Not Installed"
+        case .working:
+            return "Installing"
+        case .success:
+            return "Ready"
+        case .failure:
+            return "Failed"
+        }
+    }
+
+    private var icon: String {
+        switch state {
+        case .idle:
+            return "arrow.down.circle"
+        case .working:
+            return "ellipsis"
+        case .success:
+            return "checkmark"
+        case .failure:
+            return "exclamationmark"
+        }
+    }
+
+    private var backgroundColor: Color {
         switch state {
         case .success:
-            return .green
+            return Color.green.opacity(0.16)
         case .failure:
-            return .orange
+            return Color.red.opacity(0.12)
         case .working:
-            return .secondary
+            return Color.blue.opacity(0.12)
         case .idle:
-            return .secondary
+            return Color.black.opacity(0.08)
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch state {
+        case .success:
+            return Color.green.opacity(0.82)
+        case .failure:
+            return Color.red.opacity(0.82)
+        case .working:
+            return Color.blue.opacity(0.82)
+        case .idle:
+            return Color.black.opacity(0.65)
         }
     }
 }

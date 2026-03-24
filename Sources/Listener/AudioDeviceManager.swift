@@ -7,9 +7,7 @@ struct MicrophoneDevice: Identifiable, Equatable, Hashable {
     let isDefault: Bool
 
     var stableID: UInt32 { id }
-    var displayName: String {
-        isDefault ? "\(name) (System Default)" : name
-    }
+    var displayName: String { name }
 }
 
 enum AudioDeviceManager {
@@ -53,6 +51,22 @@ enum AudioDeviceManager {
 
     static func inputDeviceName(for deviceID: AudioDeviceID) -> String? {
         deviceName(for: deviceID)
+    }
+
+    static func preferredBuiltInInputDeviceID(from devices: [MicrophoneDevice]? = nil) -> AudioDeviceID? {
+        let availableDevices = devices ?? availableInputDevices()
+        let defaultInputID = defaultInputDeviceID()
+
+        if let directMatch = availableDevices.first(where: isPreferredBuiltInMicrophone) {
+            return directMatch.id
+        }
+
+        if let defaultInputID,
+           availableDevices.contains(where: { $0.id == defaultInputID }) {
+            return defaultInputID
+        }
+
+        return availableDevices.first?.id
     }
 
     private static func systemDeviceIDs() -> [AudioDeviceID] {
@@ -139,5 +153,32 @@ enum AudioDeviceManager {
 
         guard status == noErr, let cfName else { return nil }
         return cfName as String
+    }
+
+    private static func isPreferredBuiltInMicrophone(_ device: MicrophoneDevice) -> Bool {
+        let lowered = device.name.lowercased()
+        let builtInSignals = [
+            "macbook",
+            "built-in",
+            "built in",
+            "internal microphone",
+            "microphone"
+        ]
+
+        guard builtInSignals.contains(where: lowered.contains) else {
+            return false
+        }
+
+        let externalSignals = [
+            "airpods",
+            "usb",
+            "display",
+            "headset",
+            "headphones",
+            "bluetooth",
+            "webcam"
+        ]
+
+        return externalSignals.contains(where: lowered.contains) == false
     }
 }

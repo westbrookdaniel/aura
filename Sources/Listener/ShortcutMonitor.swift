@@ -76,7 +76,7 @@ final class ShortcutMonitor {
             return false
         }
 
-        guard currentShortcut.triggerKey == .fn || currentShortcut.triggerKey == .optionFn else {
+        guard currentShortcut.triggerKey == .fn else {
             return false
         }
 
@@ -104,8 +104,6 @@ final class ShortcutMonitor {
 
         switch currentShortcut.triggerKey {
         case .fn:
-            return false
-        case .optionFn:
             return false
         case .rightCommand:
             return event.keyCode == UInt16(kVK_RightCommand)

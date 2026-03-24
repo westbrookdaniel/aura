@@ -4,7 +4,7 @@ import Testing
 struct ShortcutSpecTests {
     @Test
     func defaultShortcutUsesFn() {
-        #expect(ShortcutSpec.default.triggerKey == .optionFn)
+        #expect(ShortcutSpec.default.triggerKey == .fn)
         #expect(ShortcutSpec.default.modifiers.isEmpty)
     }
 

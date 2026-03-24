@@ -6,6 +6,7 @@ final class OverlayPanelController {
     private enum IndicatorState {
         case recording
         case error
+        case warning(String)
     }
 
     private var recorderPanel: NSPanel?
@@ -27,8 +28,17 @@ final class OverlayPanelController {
     func updateRecorder(samples: [CGFloat]) {
         guard let recorderHostingView else { return }
         currentLevel = samples.isEmpty ? 0.18 : samples.reduce(0, +) / CGFloat(samples.count)
+        let state: RecorderOverlayView.State
+        switch indicatorState {
+        case .recording:
+            state = .recording
+        case .error:
+            state = .error
+        case .warning(let message):
+            state = .warning(message)
+        }
         recorderHostingView.rootView = RecorderOverlayView(
-            state: indicatorState == .recording ? .recording : .error,
+            state: state,
             level: currentLevel
         )
         positionPanels()
@@ -52,6 +62,36 @@ final class OverlayPanelController {
         alertDismissTask?.cancel()
         alertDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
+            await MainActor.run {
+                self?.hideRecorder()
+            }
+        }
+    }
+
+    func showClippedStartWarning() {
+        showWarning(message: "Try waiting longer before talking")
+    }
+
+    func showShortHoldWarning() {
+        showWarning(message: "Hold the button while you talk")
+    }
+
+    private func showWarning(message: String) {
+        if recorderPanel == nil {
+            createRecorderPanel()
+        }
+        indicatorState = .warning(message)
+        recorderHostingView?.rootView = RecorderOverlayView(
+            state: .warning(message),
+            level: 0
+        )
+        resizeRecorderPanel(to: NSSize(width: 248, height: 44))
+        positionPanels()
+        recorderPanel?.orderFrontRegardless()
+
+        alertDismissTask?.cancel()
+        alertDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
             await MainActor.run {
                 self?.hideRecorder()
             }
@@ -90,11 +130,20 @@ final class OverlayPanelController {
         self.recorderHostingView = host
     }
 
+    private func resizeRecorderPanel(to size: NSSize) {
+        guard let recorderPanel else { return }
+        let origin = recorderPanel.frame.origin
+        recorderPanel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
     private func positionPanels() {
         let screen = NSScreen.main ?? NSScreen.screens.first
         guard let frame = screen?.visibleFrame else { return }
 
         if let recorderPanel {
+            if case .recording = indicatorState {
+                resizeRecorderPanel(to: NSSize(width: 54, height: 54))
+            }
             let width = recorderPanel.frame.width
             let height = recorderPanel.frame.height
             let x = frame.midX - (width / 2)
