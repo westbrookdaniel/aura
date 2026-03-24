@@ -15,6 +15,10 @@ struct AccessibilityTextInsertionService: TextInsertionService {
             return .accessibility
         }
 
+        if insertViaTyping(text: text) {
+            return .typingFallback
+        }
+
         try insertViaPaste(text: text)
         return .pasteFallback
     }
@@ -113,6 +117,30 @@ struct AccessibilityTextInsertionService: TextInsertionService {
     }
 
     @MainActor
+    private func insertViaTyping(text: String) -> Bool {
+        guard text.isEmpty == false else {
+            return true
+        }
+
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            return false
+        }
+
+        let utf16Text = Array(text.utf16)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+        else {
+            return false
+        }
+
+        keyDown.keyboardSetUnicodeString(stringLength: utf16Text.count, unicodeString: utf16Text)
+        keyUp.keyboardSetUnicodeString(stringLength: utf16Text.count, unicodeString: utf16Text)
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        return true
+    }
+
+    @MainActor
     private func insertViaPaste(text: String) throws {
         let pasteboard = NSPasteboard.general
         let existingStrings = pasteboard.pasteboardItems?.compactMap {
@@ -128,19 +156,15 @@ struct AccessibilityTextInsertionService: TextInsertionService {
             throw TextInsertionError.couldNotCreateEventSource
         }
 
-        let commandDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Command), keyDown: true)
         let vDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true)
         let vUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
-        let commandUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Command), keyDown: false)
         vDown?.flags = .maskCommand
         vUp?.flags = .maskCommand
 
-        commandDown?.post(tap: .cghidEventTap)
-        vDown?.post(tap: .cghidEventTap)
-        vUp?.post(tap: .cghidEventTap)
-        commandUp?.post(tap: .cghidEventTap)
+        vDown?.post(tap: .cgAnnotatedSessionEventTap)
+        vUp?.post(tap: .cgAnnotatedSessionEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             let restorePasteboard = NSPasteboard.general
             restorePasteboard.clearContents()
             if existingStrings.isEmpty == false {
@@ -148,6 +172,7 @@ struct AccessibilityTextInsertionService: TextInsertionService {
             }
         }
     }
+
 }
 
 enum TextInsertionError: LocalizedError {

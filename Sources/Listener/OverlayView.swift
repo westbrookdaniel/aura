@@ -30,6 +30,7 @@ struct RecorderOverlayView: View {
                         Circle()
                             .fill(Color.white)
                     )
+                    .environment(\.colorScheme, .light)
             case .warning(let message):
                 Text(message)
                     .font(.system(size: 12, weight: .semibold))

@@ -88,9 +88,13 @@ final class AppState: ObservableObject {
         Task {
             do {
                 await MainActor.run {
-                    recorderSetupState = .working("Installing SoX with Homebrew…")
+                    recorderSetupState = .working(message: "Preparing SoX install...", progress: nil)
                 }
-                let path = try await WhisperInstallService.installSox()
+                let path = try await WhisperInstallService.installSox { stage in
+                    Task { @MainActor in
+                        self.recorderSetupState = .working(message: stage, progress: nil)
+                    }
+                }
                 await MainActor.run {
                     preferences.soxBinaryPath = path
                     recorderSetupState = .success("SoX is ready")
@@ -160,18 +164,30 @@ final class AppState: ObservableObject {
                 let binaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
                 if !FileManager.default.isExecutableFile(atPath: binaryPath) {
                     await MainActor.run {
-                        whisperSetupState = .working("Installing whisper.cpp with Homebrew…")
+                        whisperSetupState = .working(message: "Preparing whisper.cpp install...", progress: nil)
                     }
-                    let installedCLIPath = try await WhisperInstallService.installCLI()
+                    let installedCLIPath = try await WhisperInstallService.installCLI { stage in
+                        Task { @MainActor in
+                            self.whisperSetupState = .working(message: stage, progress: nil)
+                        }
+                    }
                     await MainActor.run {
                         preferences.whisperBinaryPath = installedCLIPath
                     }
                 }
 
                 await MainActor.run {
-                    whisperSetupState = .working("Downloading Medium English…")
+                    whisperSetupState = .working(message: "Starting Medium English download...", progress: 0)
                 }
-                let path = try await WhisperInstallService.downloadBaseModel()
+                let path = try await WhisperInstallService.downloadBaseModel { progress in
+                    let percentage = Int((progress * 100).rounded())
+                    Task { @MainActor in
+                        self.whisperSetupState = .working(
+                            message: "Downloading Medium English... \(percentage)%",
+                            progress: progress
+                        )
+                    }
+                }
                 await MainActor.run {
                     preferences.modelPath = path
                     whisperSetupState = .success("Medium English is ready")

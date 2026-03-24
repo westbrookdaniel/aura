@@ -546,7 +546,7 @@ struct SetupInstallRow: View {
         switch state {
         case .idle:
             return "Not installed"
-        case .working(let message), .success(let message), .failure(let message):
+        case .working(let message, _), .success(let message), .failure(let message):
             return message
         }
     }
@@ -619,28 +619,52 @@ struct InstallStatusBadge: View {
     let state: InstallProgressState
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(backgroundColor)
-            )
+        HStack(spacing: 8) {
+            if isWorking {
+                if let progress {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .tint(foregroundColor)
+                        .frame(width: 36)
+                        .scaleEffect(x: 1, y: 0.7, anchor: .center)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(.mini)
+                        .tint(foregroundColor)
+                }
+            } else {
+                Image(systemName: icon)
+            }
+
+            Text(title)
+                .lineLimit(1)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(foregroundColor)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(backgroundColor)
+        )
     }
 
     private var title: String {
         switch state {
         case .idle:
             return "Not Installed"
-        case .working:
-            return "Installing"
+        case .working(let message, _):
+            return message
         case .success:
             return "Ready"
         case .failure:
             return "Failed"
         }
+    }
+
+    private var progress: Double? {
+        state.progress
     }
 
     private var icon: String {
@@ -654,6 +678,13 @@ struct InstallStatusBadge: View {
         case .failure:
             return "exclamationmark"
         }
+    }
+
+    private var isWorking: Bool {
+        if case .working = state {
+            return true
+        }
+        return false
     }
 
     private var backgroundColor: Color {
