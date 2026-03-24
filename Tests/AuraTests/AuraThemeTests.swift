@@ -1,5 +1,5 @@
 import Testing
-@testable import Listener
+@testable import Aura
 
 struct AuraThemeTests {
     @Test

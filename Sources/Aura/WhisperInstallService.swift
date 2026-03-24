@@ -116,7 +116,7 @@ enum WhisperInstallService {
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
-        ).appendingPathComponent("Listener", isDirectory: true)
+        ).appendingPathComponent("Aura", isDirectory: true)
         return appSupport.appendingPathComponent(mediumEnglishFilename)
     }
 
@@ -202,7 +202,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         do {
             let persistedLocation = FileManager.default.temporaryDirectory
-                .appendingPathComponent("listener-model-download-\(UUID().uuidString).tmp")
+                .appendingPathComponent("aura-model-download-\(UUID().uuidString).tmp")
             if FileManager.default.fileExists(atPath: persistedLocation.path) {
                 try FileManager.default.removeItem(at: persistedLocation)
             }
@@ -246,9 +246,9 @@ enum WhisperInstallError: LocalizedError {
         case .homebrewNotFound:
             return "Homebrew was not found. Install Homebrew first, then try again."
         case .cliNotFoundAfterInstall:
-            return "whisper-cpp installed, but Listener could not find whisper-cli afterwards."
+            return "whisper-cpp installed, but Aura could not find whisper-cli afterwards."
         case .soxNotFoundAfterInstall:
-            return "SoX installed, but Listener could not find the `sox` binary afterwards."
+            return "SoX installed, but Aura could not find the `sox` binary afterwards."
         case .installFailed(let message):
             return "Whisper install failed: \(message)"
         }

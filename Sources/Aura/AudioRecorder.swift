@@ -23,7 +23,7 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         }
 
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("listener-\(UUID().uuidString).wav")
+            .appendingPathComponent("aura-\(UUID().uuidString).wav")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binaryPath)
 

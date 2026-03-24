@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="Listener"
+APP_NAME="Aura"
 DEVELOPER_NAME="Daniel Westbrook"
 APPLE_ID_DEFAULT="westy12dan@gmail.com"
-DEFAULT_NOTARY_PROFILE="listener-notary"
+DEFAULT_NOTARY_PROFILE="aura-notary"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 APP_BUNDLE="${DIST_DIR}/${APP_NAME}.app"
@@ -14,16 +14,18 @@ CLANG_CACHE_DIR="${BUILD_CACHE_DIR}/clang"
 SWIFTPM_CACHE_DIR="${BUILD_CACHE_DIR}/swiftpm"
 ORG_SWIFTPM_CACHE_DIR="${BUILD_CACHE_DIR}/org.swift.swiftpm"
 TMP_DIR="${BUILD_CACHE_DIR}/tmp"
+DEFAULT_APP_ICON_PATH="${ROOT_DIR}/Packaging/AppIcon.icns"
+APP_ICON_PREVIEW_PATH="${ROOT_DIR}/Packaging/AuraIconPreview.png"
 
-BUNDLE_ID="${LISTENER_BUNDLE_ID:-com.westbrookdaniel.listener}"
-VERSION="${LISTENER_VERSION:-0.1.0}"
-SHORT_VERSION="${LISTENER_SHORT_VERSION:-}"
-MIN_SYSTEM_VERSION="${LISTENER_MIN_SYSTEM_VERSION:-13.0}"
-MICROPHONE_USAGE="${LISTENER_MICROPHONE_USAGE:-Listener needs microphone access to capture dictation audio.}"
-SIGN_IDENTITY="${LISTENER_CODESIGN_IDENTITY:-}"
-TEAM_ID="${LISTENER_TEAM_ID:-}"
-NOTARY_PROFILE="${LISTENER_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
-APP_ICON_PATH="${LISTENER_APP_ICON:-${ROOT_DIR}/Packaging/AppIcon.icns}"
+BUNDLE_ID="${AURA_BUNDLE_ID:-com.westbrookdaniel.aura}"
+VERSION="${AURA_VERSION:-0.1.0}"
+SHORT_VERSION="${AURA_SHORT_VERSION:-}"
+MIN_SYSTEM_VERSION="${AURA_MIN_SYSTEM_VERSION:-13.0}"
+MICROPHONE_USAGE="${AURA_MICROPHONE_USAGE:-Aura needs microphone access to capture dictation audio.}"
+SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
+TEAM_ID="${AURA_TEAM_ID:-}"
+NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
+APP_ICON_PATH="${AURA_APP_ICON:-${DEFAULT_APP_ICON_PATH}}"
 
 ARCHIVE=1
 NOTARIZE=0
@@ -47,15 +49,15 @@ Options:
   --help                    Show this help text
 
 Environment variables:
-  LISTENER_BUNDLE_ID
-  LISTENER_VERSION
-  LISTENER_SHORT_VERSION
-  LISTENER_MIN_SYSTEM_VERSION
-  LISTENER_MICROPHONE_USAGE
-  LISTENER_CODESIGN_IDENTITY
-  LISTENER_TEAM_ID
-  LISTENER_NOTARY_PROFILE
-  LISTENER_APP_ICON
+  AURA_BUNDLE_ID
+  AURA_VERSION
+  AURA_SHORT_VERSION
+  AURA_MIN_SYSTEM_VERSION
+  AURA_MICROPHONE_USAGE
+  AURA_CODESIGN_IDENTITY
+  AURA_TEAM_ID
+  AURA_NOTARY_PROFILE
+  AURA_APP_ICON
 
 Defaults:
   bundle id: ${BUNDLE_ID}
@@ -122,12 +124,12 @@ if [[ -z "${SIGN_IDENTITY}" && -n "${TEAM_ID}" ]]; then
 fi
 
 if [[ "${NOTARIZE}" -eq 1 && -z "${NOTARY_PROFILE}" ]]; then
-    echo "Notarization requires --notary-profile or LISTENER_NOTARY_PROFILE." >&2
+    echo "Notarization requires --notary-profile or AURA_NOTARY_PROFILE." >&2
     exit 1
 fi
 
 if [[ "${NOTARIZE}" -eq 1 && -z "${SIGN_IDENTITY}" ]]; then
-    echo "Notarization requires --sign or LISTENER_CODESIGN_IDENTITY." >&2
+    echo "Notarization requires --sign or AURA_CODESIGN_IDENTITY." >&2
     exit 1
 fi
 
@@ -144,6 +146,11 @@ SWIFT_BUILD_ENV=(
     "SWIFTPM_MODULECACHE_OVERRIDE=${SWIFTPM_CACHE_DIR}"
     "HOME=${ROOT_DIR}"
 )
+
+if [[ "${APP_ICON_PATH}" == "${DEFAULT_APP_ICON_PATH}" ]]; then
+    echo "Generating Aura app icon..."
+    env "${SWIFT_BUILD_ENV[@]}" swift "${ROOT_DIR}/Packaging/GenerateAppIcon.swift" "${APP_ICON_PATH}"
+fi
 
 echo "Building ${APP_NAME} in release mode..."
 env "${SWIFT_BUILD_ENV[@]}" swift build --disable-sandbox --scratch-path "${SCRATCH_DIR}" -c release --product "${APP_NAME}"
@@ -179,12 +186,16 @@ if [[ -f "${APP_ICON_PATH}" ]]; then
         /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${INFO_PLIST}" >/dev/null
 fi
 
+if [[ -f "${APP_ICON_PREVIEW_PATH}" ]]; then
+    env "${SWIFT_BUILD_ENV[@]}" swift "${ROOT_DIR}/Packaging/ApplyBundleIcon.swift" "${APP_ICON_PREVIEW_PATH}" "${APP_BUNDLE}"
+fi
+
 if [[ -n "${SIGN_IDENTITY}" ]]; then
     echo "Signing ${APP_BUNDLE}..."
     codesign --force --deep --options runtime --sign "${SIGN_IDENTITY}" "${APP_BUNDLE}"
     codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}"
 else
-    echo "Skipping code signing. Set LISTENER_CODESIGN_IDENTITY or pass --sign to sign the app."
+    echo "Skipping code signing. Set AURA_CODESIGN_IDENTITY or pass --sign to sign the app."
 fi
 
 if [[ "${ARCHIVE}" -eq 1 ]]; then

@@ -59,7 +59,7 @@ enum AudioPreprocessor {
 
         let normalized = normalize(samples: samples, analysis: analysis, configuration: configuration)
 
-        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("listener-preprocessed-\(UUID().uuidString).wav")
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("aura-preprocessed-\(UUID().uuidString).wav")
         let pcmData = pcm16Data(from: normalized)
         let wavData = WAVEncoder.wrapPCM16Mono(pcmData: pcmData, sampleRate: 16_000)
         try wavData.write(to: outputURL, options: .atomic)

@@ -8,7 +8,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private init() {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Listener"
+        window.title = "Aura"
         window.setContentSize(NSSize(width: 740, height: 720))
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true

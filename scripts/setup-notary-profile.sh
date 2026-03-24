@@ -2,9 +2,9 @@
 set -euo pipefail
 
 APPLE_ID="westy12dan@gmail.com"
-PROFILE_NAME="${LISTENER_NOTARY_PROFILE:-listener-notary}"
-TEAM_ID="${LISTENER_TEAM_ID:-}"
-APP_PASSWORD="${LISTENER_APP_PASSWORD:-}"
+PROFILE_NAME="${AURA_NOTARY_PROFILE:-aura-notary}"
+TEAM_ID="${AURA_TEAM_ID:-}"
+APP_PASSWORD="${AURA_APP_PASSWORD:-}"
 
 usage() {
     cat <<EOF

@@ -130,9 +130,6 @@ struct RecorderOverlayView: View {
     }
 
     private var dotShadowColor: Color {
-        // colorScheme == .dark
-        //     ? Color.white.opacity(0.20)
-        //     : Color.black.opacity(0.20)
         theme.loadingTint(for: colorScheme).opacity(0.2)
     }
 

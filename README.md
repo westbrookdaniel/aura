@@ -1,6 +1,6 @@
-# Listener
+# Aura
 
-Listener is a small macOS menu bar dictation app built in Swift. Hold a shortcut, speak, and it records audio, runs local transcription through `whisper.cpp`, then pastes the result into the focused app.
+Aura is a small macOS menu bar dictation app built in Swift. Hold a shortcut, speak, and it records audio, runs local transcription through `whisper.cpp`, then pastes the result into the focused app.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Default paths:
 
 - `/opt/homebrew/bin/sox`
 - `/opt/homebrew/bin/whisper-cli`
-- `~/Library/Application Support/Listener/ggml-medium.en.bin`
+- `~/Library/Application Support/Aura/ggml-medium.en.bin`
 
 ## Run
 
@@ -33,5 +33,5 @@ swift run
 
 Output:
 
-- `dist/Listener.app`
-- `dist/Listener.zip`
+- `dist/Aura.app`
+- `dist/Aura.zip`

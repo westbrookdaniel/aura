@@ -2,25 +2,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "Listener",
+    name: "Aura",
     platforms: [
         .macOS(.v13)
     ],
     products: [
         .executable(
-            name: "Listener",
-            targets: ["Listener"]
+            name: "Aura",
+            targets: ["Aura"]
         )
     ],
     targets: [
         .executableTarget(
-            name: "Listener",
-            path: "Sources/Listener"
+            name: "Aura",
+            path: "Sources/Aura"
         ),
         .testTarget(
-            name: "ListenerTests",
-            dependencies: ["Listener"],
-            path: "Tests/ListenerTests"
+            name: "AuraTests",
+            dependencies: ["Aura"],
+            path: "Tests/AuraTests"
         )
     ]
 )

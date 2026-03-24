@@ -19,10 +19,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func configureStatusItem() {
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Listener")
-            image?.isTemplate = true
-            button.image = image
-            button.toolTip = "Listener"
+            button.image = AuraStatusIcon.makeTemplateImage()
+            button.toolTip = "Aura"
             button.imagePosition = .imageOnly
             button.appearance = nil
         }
@@ -39,7 +37,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         ).configured(target: self))
 
         menu.addItem(NSMenuItem(
-            title: "Quit Listener",
+            title: "Quit Aura",
             action: #selector(quit),
             keyEquivalent: "q"
         ).configured(target: self))
