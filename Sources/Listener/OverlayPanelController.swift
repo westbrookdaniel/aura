@@ -3,6 +3,9 @@ import SwiftUI
 
 @MainActor
 final class OverlayPanelController {
+    private let fadeDuration: TimeInterval = 0.18
+    private let loadingDelay: Duration = .milliseconds(500)
+
     private enum IndicatorState {
         case recording
         case loading
@@ -13,16 +16,19 @@ final class OverlayPanelController {
     private var recorderPanel: NSPanel?
     private var recorderHostingView: NSHostingView<RecorderOverlayView>?
     private var alertDismissTask: Task<Void, Never>?
+    private var loadingTask: Task<Void, Never>?
     private var indicatorState: IndicatorState = .recording
     private var currentLevel: CGFloat = 0.18
 
     func showRecorder(samples: [CGFloat]) {
+        cancelTransientTasks()
         if recorderPanel == nil {
             createRecorderPanel()
         }
         indicatorState = .recording
         updateRecorder(samples: samples)
         positionPanels()
+        recorderPanel?.alphaValue = 1
         recorderPanel?.orderFrontRegardless()
     }
 
@@ -48,21 +54,20 @@ final class OverlayPanelController {
     }
 
     func hideRecorder() {
-        alertDismissTask?.cancel()
-        alertDismissTask = nil
-        recorderPanel?.orderOut(nil)
+        cancelTransientTasks()
+        fadeOutRecorder()
     }
 
     func showAlert(message: String) {
+        cancelTransientTasks()
         if recorderPanel == nil {
             createRecorderPanel()
         }
         indicatorState = .error
         recorderHostingView?.rootView = RecorderOverlayView(state: .error, level: 0)
         positionPanels()
-        recorderPanel?.orderFrontRegardless()
+        fadeInRecorder()
 
-        alertDismissTask?.cancel()
         alertDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             await MainActor.run {
@@ -72,16 +77,16 @@ final class OverlayPanelController {
     }
 
     func showLoading() {
-        if recorderPanel == nil {
-            createRecorderPanel()
+        cancelTransientTasks()
+        fadeOutRecorder()
+
+        loadingTask = Task { [weak self] in
+            try? await Task.sleep(for: self?.loadingDelay ?? .zero)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.presentLoadingIfNeeded()
+            }
         }
-        alertDismissTask?.cancel()
-        alertDismissTask = nil
-        indicatorState = .loading
-        recorderHostingView?.rootView = RecorderOverlayView(state: .loading, level: 0)
-        resizeRecorderPanel(to: NSSize(width: 54, height: 54))
-        positionPanels()
-        recorderPanel?.orderFrontRegardless()
     }
 
     func showClippedStartWarning() {
@@ -93,6 +98,7 @@ final class OverlayPanelController {
     }
 
     private func showWarning(message: String) {
+        cancelTransientTasks()
         if recorderPanel == nil {
             createRecorderPanel()
         }
@@ -103,9 +109,8 @@ final class OverlayPanelController {
         )
         resizeRecorderPanel(to: NSSize(width: 248, height: 44))
         positionPanels()
-        recorderPanel?.orderFrontRegardless()
+        fadeInRecorder()
 
-        alertDismissTask?.cancel()
         alertDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.2))
             await MainActor.run {
@@ -136,6 +141,7 @@ final class OverlayPanelController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
+        panel.alphaValue = 1
 
         let host = NSHostingView(rootView: RecorderOverlayView(state: .recording, level: 0.18))
         host.frame = panel.contentView?.bounds ?? .zero
@@ -169,5 +175,58 @@ final class OverlayPanelController {
             let y = frame.minY + 22
             recorderPanel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
         }
+    }
+
+    private func presentLoadingIfNeeded() {
+        if recorderPanel == nil {
+            createRecorderPanel()
+        }
+        guard let recorderPanel else { return }
+        indicatorState = .loading
+        recorderHostingView?.rootView = RecorderOverlayView(state: .loading, level: 0)
+        resizeRecorderPanel(to: NSSize(width: 54, height: 54))
+        positionPanels()
+        recorderPanel.alphaValue = 0
+        recorderPanel.orderFrontRegardless()
+        fadeInRecorder()
+    }
+
+    private func fadeInRecorder() {
+        guard let recorderPanel else { return }
+        recorderPanel.alphaValue = 0
+        recorderPanel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            recorderPanel.animator().alphaValue = 1
+        }
+    }
+
+    private func fadeOutRecorder() {
+        guard let recorderPanel else { return }
+        let panel = recorderPanel
+        if !panel.isVisible {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            Task { @MainActor in
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        }
+    }
+
+    private func cancelTransientTasks() {
+        alertDismissTask?.cancel()
+        alertDismissTask = nil
+        loadingTask?.cancel()
+        loadingTask = nil
     }
 }
