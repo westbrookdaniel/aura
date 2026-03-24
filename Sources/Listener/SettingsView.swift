@@ -136,7 +136,7 @@ struct SettingsView: View {
                         Spacer()
 
                         Button(action: appState.openTranscriptionsFolder) {
-                            Label("Open Transcriptions Folder", systemImage: "waveform.badge.folder")
+                            Label("Open Transcriptions", systemImage: "folder")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
@@ -340,17 +340,8 @@ struct SettingsWarningCard: View {
 struct SettingsHeaderView: View {
     var body: some View {
         Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.11, green: 0.14, blue: 0.20),
-                        Color(red: 0.16, green: 0.19, blue: 0.28)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(height: 56)
+            .fill(Color.white)
+            .frame(height: 1)
     }
 }
 

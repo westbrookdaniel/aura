@@ -13,7 +13,7 @@ struct RecorderOverlayView: View {
         Circle()
             .fill(fillColor)
             .scaleEffect(scale)
-            .animation(.easeOut(duration: 0.08), value: scale)
+            .animation(.easeOut(duration: 0.10), value: scale)
             .frame(width: 18, height: 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -30,7 +30,8 @@ struct RecorderOverlayView: View {
     private var scale: CGFloat {
         switch state {
         case .recording:
-            return 1 + min(max(level, 0), 1) * 1.15
+            let clampedLevel = min(max(level, 0), 1)
+            return 0.72 + clampedLevel * 1.75
         case .error:
             return 1
         }
