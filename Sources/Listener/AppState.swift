@@ -365,13 +365,6 @@ final class AppState: ObservableObject {
                     audioURL: fileURL,
                     configuration: AudioPreprocessingConfiguration()
                 )
-                if preprocessing.analysis.profile == .mostlySilent {
-                    await MainActor.run {
-                        sessionState = .idle
-                        overlayController.hideRecorder()
-                    }
-                    return
-                }
 
                 let configuration = makeTranscriptionConfiguration()
                 try await transcriptionEngine.prepare(configuration: configuration)

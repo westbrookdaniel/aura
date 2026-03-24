@@ -193,9 +193,13 @@ struct VoiceResponseHistoryRow: View {
 
                     Spacer()
 
-                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(didCopy ? Color.green.opacity(0.82) : .secondary)
+                    ZStack {
+                        Color.clear
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(didCopy ? Color.green.opacity(0.82) : .secondary)
+                    }
+                    .frame(width: 18, height: 18)
                 }
 
                 Text(item.text)

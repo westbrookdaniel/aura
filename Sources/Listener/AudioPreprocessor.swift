@@ -3,10 +3,19 @@ import Foundation
 
 struct AudioPreprocessingConfiguration: Equatable, Codable {
     var targetPeakNormal: Float = 0.55
-    var targetPeakQuiet: Float = 0.82
+    var targetPeakQuiet: Float = 0.72
     var silenceThreshold: Float = 0.008
     var whisperRMSUpperBound: Float = 0.045
     var quietRMSUpperBound: Float = 0.09
+    var normalCompressionDrive: Float = 1.25
+    var quietCompressionDrive: Float = 1.55
+    var quietActivationThresholdMultiplier: Float = 1.6
+    var quietMinimumFloor: Float = 0.018
+    var whisperMinimumFloor: Float = 0.03
+    var quietUpwardCompressionExponent: Float = 0.94
+    var whisperUpwardCompressionExponent: Float = 0.88
+    var quietUpwardCompressionBlend: Float = 0.22
+    var whisperUpwardCompressionBlend: Float = 0.34
 }
 
 enum AudioSpeechProfile: String, Equatable, Codable {
@@ -128,21 +137,80 @@ enum AudioPreprocessor {
         guard analysis.peak > 0 else { return samples }
 
         let targetPeak: Float
+        let compressionDrive: Float
+        let minimumFloor: Float
+        let upwardCompressionExponent: Float
+        let upwardCompressionBlend: Float
         switch analysis.profile {
-        case .whisperLike, .quiet:
+        case .whisperLike:
             targetPeak = configuration.targetPeakQuiet
+            compressionDrive = configuration.quietCompressionDrive
+            minimumFloor = configuration.whisperMinimumFloor
+            upwardCompressionExponent = configuration.whisperUpwardCompressionExponent
+            upwardCompressionBlend = configuration.whisperUpwardCompressionBlend
+        case .quiet:
+            targetPeak = configuration.targetPeakQuiet
+            compressionDrive = configuration.quietCompressionDrive
+            minimumFloor = configuration.quietMinimumFloor
+            upwardCompressionExponent = configuration.quietUpwardCompressionExponent
+            upwardCompressionBlend = configuration.quietUpwardCompressionBlend
         case .mostlySilent:
             targetPeak = configuration.targetPeakNormal
+            compressionDrive = configuration.normalCompressionDrive
+            minimumFloor = 0
+            upwardCompressionExponent = 1
+            upwardCompressionBlend = 0
         case .normal:
             targetPeak = configuration.targetPeakNormal
+            compressionDrive = configuration.normalCompressionDrive
+            minimumFloor = 0
+            upwardCompressionExponent = 1
+            upwardCompressionBlend = 0
         }
 
         let gain = min(10.0, targetPeak / analysis.peak)
+        let activationThreshold = configuration.silenceThreshold * configuration.quietActivationThresholdMultiplier
+
         return samples.map { sample in
             let boosted = sample * gain
-            let compressed = tanh(boosted * 1.35) / tanh(1.35)
+            let upwardCompressed = applyUpwardCompression(
+                to: boosted,
+                activationThreshold: activationThreshold,
+                minimumFloor: minimumFloor,
+                exponent: upwardCompressionExponent,
+                blend: upwardCompressionBlend
+            )
+            let compressed = tanh(upwardCompressed * compressionDrive) / tanh(compressionDrive)
             return max(-1, min(1, compressed))
         }
+    }
+
+    private static func applyUpwardCompression(
+        to sample: Float,
+        activationThreshold: Float,
+        minimumFloor: Float,
+        exponent: Float,
+        blend: Float
+    ) -> Float {
+        let magnitude = abs(sample)
+        guard magnitude > activationThreshold else { return sample }
+
+        let sign: Float = sample < 0 ? -1 : 1
+        var enhancedMagnitude = magnitude
+
+        if exponent < 1 {
+            enhancedMagnitude = pow(magnitude, exponent)
+        }
+
+        if minimumFloor > 0 {
+            enhancedMagnitude = max(enhancedMagnitude, minimumFloor)
+        }
+
+        if blend > 0 {
+            enhancedMagnitude = (magnitude * (1 - blend)) + (enhancedMagnitude * blend)
+        }
+
+        return sign * enhancedMagnitude
     }
 
     private static func pcm16Data(from samples: [Float]) -> Data {
