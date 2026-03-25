@@ -72,42 +72,12 @@ enum WhisperInstallService {
         (try? modelDestinationURL().path) ?? ""
     }
 
-    static func installSox(onStageChange: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
-        onStageChange("Installing SoX with Homebrew...")
-        let brewPath = try resolveBrewPath()
-        try await runProcess(executable: brewPath, arguments: ["install", "sox"])
-
-        onStageChange("Verifying SoX install...")
-        let prefix = try await captureProcessOutput(executable: brewPath, arguments: ["--prefix", "sox"])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidate = URL(fileURLWithPath: prefix).appendingPathComponent("bin/sox").path
-
-        if FileManager.default.isExecutableFile(atPath: candidate) {
-            return candidate
-        }
-
-        let fallbackPaths = [
-            "/opt/homebrew/bin/sox",
-            "/usr/local/bin/sox"
-        ]
-
-        if let fallback = fallbackPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return fallback
-        }
-
-        throw WhisperInstallError.soxNotFoundAfterInstall
-    }
-
     static func isCLIInstalled(at path: String) -> Bool {
         FileManager.default.isExecutableFile(atPath: NSString(string: path).expandingTildeInPath)
     }
 
     static func isBaseModelInstalled(at path: String) -> Bool {
         FileManager.default.fileExists(atPath: NSString(string: path).expandingTildeInPath)
-    }
-
-    static func isSoxInstalled(at path: String) -> Bool {
-        FileManager.default.isExecutableFile(atPath: NSString(string: path).expandingTildeInPath)
     }
 
     private static func modelDestinationURL() throws -> URL {
@@ -238,7 +208,6 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
 enum WhisperInstallError: LocalizedError {
     case homebrewNotFound
     case cliNotFoundAfterInstall
-    case soxNotFoundAfterInstall
     case installFailed(String)
 
     var errorDescription: String? {
@@ -247,8 +216,6 @@ enum WhisperInstallError: LocalizedError {
             return "Homebrew was not found. Install Homebrew first, then try again."
         case .cliNotFoundAfterInstall:
             return "whisper-cpp installed, but Aura could not find whisper-cli afterwards."
-        case .soxNotFoundAfterInstall:
-            return "SoX installed, but Aura could not find the `sox` binary afterwards."
         case .installFailed(let message):
             return "Whisper install failed: \(message)"
         }

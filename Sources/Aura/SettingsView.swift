@@ -901,25 +901,15 @@ struct SetupFlowCard: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("These will be installed via Homebrew")
+                Text("Aura installs the Whisper runtime with Homebrew and downloads the model directly.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 3) {
                     SetupInstallRow(
-                        icon: "waveform",
-                        state: appState.recorderSetupState,
-                        primaryTitle: "Install SoX",
-                        primaryAction: { appState.downloadRecorderSetup() },
-                        secondaryTitle: "Reveal",
-                        secondaryAction: { appState.revealRecorderFiles() },
-                        theme: theme
-                    )
-
-                    SetupInstallRow(
                         icon: "waveform.badge.magnifyingglass",
                         state: appState.whisperSetupState,
-                        primaryTitle: "Download Whisper Model (1.5 GB)",
+                        primaryTitle: "Set Up Whisper (1.5 GB)",
                         primaryAction: { appState.downloadWhisperSetup() },
                         secondaryTitle: "Reveal",
                         secondaryAction: { appState.revealWhisperFiles() },

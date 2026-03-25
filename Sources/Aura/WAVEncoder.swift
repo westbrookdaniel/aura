@@ -25,6 +25,19 @@ enum WAVEncoder {
         data.append(pcmData)
         return data
     }
+
+    static func wrapPCM16Mono(samples: [Float], sampleRate: Int) -> Data {
+        wrapPCM16Mono(pcmData: pcm16Data(from: samples), sampleRate: sampleRate)
+    }
+
+    static func pcm16Data(from samples: [Float]) -> Data {
+        var pcm = Data(capacity: samples.count * MemoryLayout<Int16>.size)
+        for sample in samples {
+            var intValue = Int16(max(-1, min(1, sample)) * Float(Int16.max))
+            pcm.append(Data(bytes: &intValue, count: MemoryLayout<Int16>.size))
+        }
+        return pcm
+    }
 }
 
 private extension FixedWidthInteger {

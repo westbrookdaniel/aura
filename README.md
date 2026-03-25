@@ -9,13 +9,14 @@ Aura is a small macOS menu bar dictation app built in Swift. Hold a shortcut, sp
 
 These will be installed via homebrew when using the app:
 
-- `sox`
 - `whisper-cli`
+
+The app also downloads:
+
 - `ggml-medium.en.bin`
 
 Default paths:
 
-- `/opt/homebrew/bin/sox`
 - `/opt/homebrew/bin/whisper-cli`
 - `~/Library/Application Support/Aura/ggml-medium.en.bin`
 

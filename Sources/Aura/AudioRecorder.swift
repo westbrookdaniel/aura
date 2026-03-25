@@ -6,119 +6,98 @@ import Foundation
 final class AudioRecorder: ObservableObject, @unchecked Sendable {
     @Published private(set) var normalizedLevels: [Double] = Array(repeating: 0, count: 40)
 
-    private let meteringEngine = AVAudioEngine()
+    private let recordingEngine = AVAudioEngine()
     private let stateLock = NSLock()
     private let levelProcessingLock = NSLock()
     private var recordingURL: URL?
-    private var recordingProcess: Process?
-    private var fallbackMeterTask: Task<Void, Never>?
+    private var recordedSamples: [Float] = []
+    private var recordedSampleRate: Double = 16_000
     private var isRecording = false
     private var recentPeak: Double = 0.12
 
-    func startRecording(soxBinaryPath: String, preferredDeviceID: AudioDeviceID?, preferredDeviceName: String?) throws -> URL {
-        guard !isRecording else { throw AudioRecorderError.alreadyRecording }
-        let binaryPath = NSString(string: soxBinaryPath).expandingTildeInPath
-        guard FileManager.default.isExecutableFile(atPath: binaryPath) else {
-            throw AudioRecorderError.binaryNotFound(binaryPath)
-        }
+    func startRecording(preferredDeviceID: AudioDeviceID?) throws -> URL {
+        stateLock.lock()
+        let alreadyRecording = isRecording
+        stateLock.unlock()
+        guard alreadyRecording == false else { throw AudioRecorderError.alreadyRecording }
 
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("aura-\(UUID().uuidString).wav")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: binaryPath)
-
-        var arguments = ["-q"]
-        if let preferredDeviceName, !preferredDeviceName.isEmpty {
-            arguments.append(contentsOf: ["-t", "coreaudio", preferredDeviceName])
-        } else {
-            arguments.append("-d")
-        }
-        arguments.append(contentsOf: [
-            "-b", "16",
-            "-c", "1",
-            "-r", "16000",
-            "-e", "signed-integer",
-            "-t", "wav",
-            tempURL.path
-        ])
-        process.arguments = arguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
 
         do {
-            try process.run()
+            try configureInputDevice(preferredDeviceID)
+
+            let inputNode = recordingEngine.inputNode
+            let inputFormat = inputNode.inputFormat(forBus: 0)
+            guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+                throw AudioRecorderError.couldNotStartProcess("The selected microphone did not provide a usable audio format.")
+            }
+
+            stateLock.lock()
+            recordingURL = tempURL
+            recordedSamples = []
+            recordedSampleRate = inputFormat.sampleRate
+            isRecording = true
+            stateLock.unlock()
+
+            inputNode.removeTap(onBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) { [weak self] buffer, _ in
+                self?.handleInputBuffer(buffer)
+            }
+
+            recordingEngine.prepare()
+            try recordingEngine.start()
         } catch {
+            resetStateAfterFailure()
+            if let recorderError = error as? AudioRecorderError {
+                throw recorderError
+            }
             throw AudioRecorderError.couldNotStartProcess(error.localizedDescription)
         }
 
-        stateLock.lock()
-        recordingProcess = process
-        recordingURL = tempURL
-        stateLock.unlock()
-        isRecording = true
-        startMetering(preferredDeviceID: preferredDeviceID)
         return tempURL
     }
 
     func stop() throws -> URL {
-        guard isRecording, let recordingURL else { throw AudioRecorderError.notRecording }
-
-        isRecording = false
-
         stateLock.lock()
-        let recordingProcess = self.recordingProcess
-        self.recordingProcess = nil
-        self.recordingURL = nil
+        let currentRecordingURL = recordingURL
+        let currentlyRecording = isRecording
+        stateLock.unlock()
+        guard currentlyRecording, let currentRecordingURL else { throw AudioRecorderError.notRecording }
+
+        stopCapture()
+
+        let finalSamples: [Float]
+        let sampleRate: Double
+        stateLock.lock()
+        finalSamples = recordedSamples
+        sampleRate = recordedSampleRate
+        recordingURL = nil
+        recordedSamples = []
+        recordedSampleRate = 16_000
         stateLock.unlock()
 
-        stopMetering()
+        let wavData = WAVEncoder.wrapPCM16Mono(
+            samples: finalSamples,
+            sampleRate: max(1, Int(sampleRate.rounded()))
+        )
+        do {
+            try wavData.write(to: currentRecordingURL, options: .atomic)
+        } catch {
+            throw AudioRecorderError.couldNotStopProcess(error.localizedDescription)
+        }
 
-        recordingProcess?.interrupt()
-        recordingProcess?.waitUntilExit()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.normalizedLevels = Array(repeating: 0, count: self.normalizedLevels.count)
         }
 
-        if let recordingProcess, recordingProcess.terminationStatus != 0, recordingProcess.terminationReason != .exit {
-            throw AudioRecorderError.couldNotStopProcess
-        }
-
-        return recordingURL
+        return currentRecordingURL
     }
 
-    private func startMetering(preferredDeviceID: AudioDeviceID?) {
-        fallbackMeterTask?.cancel()
-        fallbackMeterTask = nil
-
-        do {
-            try configureMeteringInputDevice(preferredDeviceID)
-
-            let inputNode = meteringEngine.inputNode
-            let inputFormat = inputNode.inputFormat(forBus: 0)
-            inputNode.removeTap(onBus: 0)
-            inputNode.installTap(onBus: 0, bufferSize: 1_024, format: inputFormat) { [weak self] buffer, _ in
-                self?.publishLevels(from: buffer)
-            }
-
-            meteringEngine.prepare()
-            try meteringEngine.start()
-        } catch {
-            startFallbackMetering()
-        }
-    }
-
-    private func stopMetering() {
-        fallbackMeterTask?.cancel()
-        fallbackMeterTask = nil
-        meteringEngine.inputNode.removeTap(onBus: 0)
-        meteringEngine.stop()
-        meteringEngine.reset()
-    }
-
-    private func configureMeteringInputDevice(_ deviceID: AudioDeviceID?) throws {
-        guard let audioUnit = meteringEngine.inputNode.audioUnit else {
-            throw AudioRecorderError.couldNotStartProcess("Could not access the metering input.")
+    private func configureInputDevice(_ deviceID: AudioDeviceID?) throws {
+        guard let audioUnit = recordingEngine.inputNode.audioUnit else {
+            throw AudioRecorderError.couldNotStartProcess("Could not access the microphone input.")
         }
         guard var deviceID else { return }
 
@@ -136,10 +115,41 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func publishLevels(from buffer: AVAudioPCMBuffer) {
-        let samples = extractSamples(from: buffer)
+    private func handleInputBuffer(_ buffer: AVAudioPCMBuffer) {
+        let samples = extractMonoSamples(from: buffer)
         guard samples.isEmpty == false else { return }
 
+        stateLock.lock()
+        if isRecording {
+            recordedSamples.append(contentsOf: samples)
+        }
+        stateLock.unlock()
+
+        publishLevels(samples)
+    }
+
+    private func stopCapture() {
+        stateLock.lock()
+        isRecording = false
+        stateLock.unlock()
+        recordingEngine.inputNode.removeTap(onBus: 0)
+        recordingEngine.stop()
+        recordingEngine.reset()
+    }
+
+    private func resetStateAfterFailure() {
+        recordingEngine.inputNode.removeTap(onBus: 0)
+        recordingEngine.stop()
+        recordingEngine.reset()
+        stateLock.lock()
+        recordingURL = nil
+        recordedSamples = []
+        recordedSampleRate = 16_000
+        isRecording = false
+        stateLock.unlock()
+    }
+
+    private func publishLevels(_ samples: [Float]) {
         let bucketCount = normalizedLevels.count
         let bucketSize = max(1, samples.count / bucketCount)
         var levels: [Double] = []
@@ -184,41 +194,58 @@ final class AudioRecorder: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func extractSamples(from buffer: AVAudioPCMBuffer) -> [Float] {
+    private func extractMonoSamples(from buffer: AVAudioPCMBuffer) -> [Float] {
         let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else { return [] }
+        let channelCount = Int(buffer.format.channelCount)
+        guard frameCount > 0, channelCount > 0 else { return [] }
 
-        if let channelData = buffer.floatChannelData?[0] {
-            return Array(UnsafeBufferPointer(start: channelData, count: frameCount))
+        if let channelData = buffer.floatChannelData {
+            var mono = Array(repeating: Float.zero, count: frameCount)
+            for channelIndex in 0..<channelCount {
+                let channel = UnsafeBufferPointer(start: channelData[channelIndex], count: frameCount)
+                for frameIndex in 0..<frameCount {
+                    mono[frameIndex] += channel[frameIndex]
+                }
+            }
+
+            if channelCount > 1 {
+                let scale = 1 / Float(channelCount)
+                for index in mono.indices {
+                    mono[index] *= scale
+                }
+            }
+
+            return mono
         }
 
-        if let int16Data = buffer.int16ChannelData?[0] {
-            return (0..<frameCount).map { Float(int16Data[$0]) / Float(Int16.max) }
+        if let channelData = buffer.int16ChannelData {
+            var mono = Array(repeating: Float.zero, count: frameCount)
+            for channelIndex in 0..<channelCount {
+                let channel = UnsafeBufferPointer(start: channelData[channelIndex], count: frameCount)
+                for frameIndex in 0..<frameCount {
+                    mono[frameIndex] += Float(channel[frameIndex]) / Float(Int16.max)
+                }
+            }
+
+            if channelCount > 1 {
+                let scale = 1 / Float(channelCount)
+                for index in mono.indices {
+                    mono[index] *= scale
+                }
+            }
+
+            return mono
         }
 
         return []
-    }
-
-    private func startFallbackMetering() {
-        fallbackMeterTask?.cancel()
-        fallbackMeterTask = Task { @MainActor [weak self] in
-            var phase = 0.0
-            while Task.isCancelled == false {
-                let amplitude = 0.16 + ((sin(phase) + 1) * 0.12)
-                self?.normalizedLevels = Array(repeating: amplitude, count: self?.normalizedLevels.count ?? 40)
-                phase += 0.45
-                try? await Task.sleep(for: .milliseconds(60))
-            }
-        }
     }
 }
 
 enum AudioRecorderError: LocalizedError {
     case alreadyRecording
     case notRecording
-    case binaryNotFound(String)
     case couldNotStartProcess(String)
-    case couldNotStopProcess
+    case couldNotStopProcess(String)
 
     var errorDescription: String? {
         switch self {
@@ -226,12 +253,10 @@ enum AudioRecorderError: LocalizedError {
             return "Audio capture is already in progress."
         case .notRecording:
             return "Audio capture was not running."
-        case .binaryNotFound(let path):
-            return "SoX was not found at \(path). Install it in Settings, then try again."
         case .couldNotStartProcess(let message):
-            return "The recorder could not start SoX: \(message)"
-        case .couldNotStopProcess:
-            return "The recorder could not stop SoX cleanly."
+            return "The recorder could not start: \(message)"
+        case .couldNotStopProcess(let message):
+            return "The recorder could not finalize the audio capture: \(message)"
         }
     }
 }

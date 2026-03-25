@@ -38,7 +38,6 @@ final class AppState: ObservableObject {
     @Published var isSettingsPresented = false
     @Published var isLaunchAtLoginEnabled = false
     @Published var isSetupFlowPresented = false
-    @Published var recorderSetupState: InstallProgressState = .idle
     @Published var whisperSetupState: InstallProgressState = .idle
     @Published var availableMicrophones: [MicrophoneDevice] = []
 
@@ -112,30 +111,6 @@ final class AppState: ObservableObject {
 
     func updateWhisperBinaryPath(_ path: String) {
         preferences.whisperBinaryPath = path
-    }
-
-    func downloadRecorderSetup() {
-        Task {
-            do {
-                await MainActor.run {
-                    recorderSetupState = .working(message: "Preparing SoX install...", progress: nil)
-                }
-                let path = try await WhisperInstallService.installSox { stage in
-                    Task { @MainActor in
-                        self.recorderSetupState = .working(message: stage, progress: nil)
-                    }
-                }
-                await MainActor.run {
-                    preferences.soxBinaryPath = path
-                    recorderSetupState = .success("SoX is ready")
-                }
-            } catch {
-                await MainActor.run {
-                    recorderSetupState = .failure(error.localizedDescription)
-                    reportError(error.localizedDescription)
-                }
-            }
-        }
     }
 
     func refreshMicrophones() {
@@ -237,12 +212,6 @@ final class AppState: ObservableObject {
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
-    }
-
-    func revealRecorderFiles() {
-        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: soxBinaryPath) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: soxBinaryPath)])
     }
 
     func openTranscriptionsFolder() {
@@ -353,19 +322,12 @@ final class AppState: ObservableObject {
     private func refreshInstallStatus() {
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
         let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
         let hasCLI = FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
         let hasModel = FileManager.default.fileExists(atPath: modelPath)
-        let hasSox = FileManager.default.isExecutableFile(atPath: soxBinaryPath)
 
         if case .working = whisperSetupState {
         } else {
             whisperSetupState = hasCLI && hasModel ? .success("Medium English is ready") : .idle
-        }
-
-        if case .working = recorderSetupState {
-        } else {
-            recorderSetupState = hasSox ? .success("SoX is ready") : .idle
         }
 
         if isSetupComplete == false {
@@ -391,12 +353,7 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let preferredMicrophoneName = preferences.selectedMicrophoneID.flatMap(AudioDeviceManager.inputDeviceName(for:))
-            let fileURL = try audioRecorder.startRecording(
-                soxBinaryPath: preferences.soxBinaryPath,
-                preferredDeviceID: preferences.selectedMicrophoneID,
-                preferredDeviceName: preferredMicrophoneName
-            )
+            let fileURL = try audioRecorder.startRecording(preferredDeviceID: preferences.selectedMicrophoneID)
             activeRecordingSessionID = UUID()
             activeRecordingURL = fileURL
             recordingStartedAt = Date()
@@ -548,11 +505,9 @@ final class AppState: ObservableObject {
     var isSetupComplete: Bool {
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
         let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-        let soxBinaryPath = NSString(string: preferences.soxBinaryPath).expandingTildeInPath
 
         return permissionState.microphone == .granted
             && permissionState.accessibility == .granted
-            && FileManager.default.isExecutableFile(atPath: soxBinaryPath)
             && FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
             && FileManager.default.fileExists(atPath: modelPath)
     }

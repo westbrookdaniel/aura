@@ -53,15 +53,18 @@ enum AudioPreprocessor {
         let samples = try extractMonoSamples(from: buffer)
         let analysis = analyze(samples: samples, configuration: configuration)
 
-        if analysis.profile == .mostlySilent {
+        let normalized = analysis.profile == .mostlySilent
+            ? samples
+            : normalize(samples: samples, analysis: analysis, configuration: configuration)
+        let targetSampleRate = 16_000.0
+        let outputSamples = resample(samples: normalized, from: inputFormat.sampleRate, to: targetSampleRate)
+
+        if analysis.profile == .mostlySilent, abs(inputFormat.sampleRate - targetSampleRate) < 0.5 {
             return PreprocessedAudioResult(fileURL: audioURL, analysis: analysis)
         }
 
-        let normalized = normalize(samples: samples, analysis: analysis, configuration: configuration)
-
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("aura-preprocessed-\(UUID().uuidString).wav")
-        let pcmData = pcm16Data(from: normalized)
-        let wavData = WAVEncoder.wrapPCM16Mono(pcmData: pcmData, sampleRate: 16_000)
+        let wavData = WAVEncoder.wrapPCM16Mono(samples: outputSamples, sampleRate: Int(targetSampleRate))
         try wavData.write(to: outputURL, options: .atomic)
         return PreprocessedAudioResult(fileURL: outputURL, analysis: analysis)
     }
@@ -213,13 +216,26 @@ enum AudioPreprocessor {
         return sign * enhancedMagnitude
     }
 
-    private static func pcm16Data(from samples: [Float]) -> Data {
-        var pcm = Data(capacity: samples.count * MemoryLayout<Int16>.size)
-        for sample in samples {
-            var intValue = Int16(max(-1, min(1, sample)) * Float(Int16.max))
-            pcm.append(Data(bytes: &intValue, count: MemoryLayout<Int16>.size))
+    private static func resample(samples: [Float], from sourceSampleRate: Double, to targetSampleRate: Double) -> [Float] {
+        guard samples.isEmpty == false else { return [] }
+        guard sourceSampleRate > 0, targetSampleRate > 0 else { return samples }
+        guard abs(sourceSampleRate - targetSampleRate) >= 0.5 else { return samples }
+
+        let outputCount = max(1, Int((Double(samples.count) * targetSampleRate / sourceSampleRate).rounded()))
+        let lastSourceIndex = samples.count - 1
+        var output = Array(repeating: Float.zero, count: outputCount)
+
+        for outputIndex in 0..<outputCount {
+            let sourcePosition = (Double(outputIndex) * sourceSampleRate) / targetSampleRate
+            let lowerIndex = min(lastSourceIndex, Int(sourcePosition))
+            let upperIndex = min(lastSourceIndex, lowerIndex + 1)
+            let fraction = Float(sourcePosition - Double(lowerIndex))
+            let lowerSample = samples[lowerIndex]
+            let upperSample = samples[upperIndex]
+            output[outputIndex] = lowerSample + ((upperSample - lowerSample) * fraction)
         }
-        return pcm
+
+        return output
     }
 }
 
