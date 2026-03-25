@@ -45,6 +45,7 @@ Release setup:
 - build signed releases with `AURA_SPARKLE_PUBLIC_ED_KEY` set
 - by default, the Sparkle feed URL points at `https://westbrookdaniel.github.io/aura/appcast.xml`
 - publish each archive into `docs/` and regenerate `appcast.xml` with `./scripts/publish-appcast.sh --version <version>`
+- or run `./scripts/release-tag.sh --version <version>` to build, publish the Sparkle artifacts, commit the `docs/` release files, and create an annotated `v<version>` git tag
 
 `docs/README.md` includes the GitHub Pages publishing flow.
 
