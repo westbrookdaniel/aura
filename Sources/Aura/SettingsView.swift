@@ -901,7 +901,7 @@ struct SetupFlowCard: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Aura installs the Whisper runtime with Homebrew and downloads the model directly.")
+                Text("Aura bundles whisper.cpp directly and keeps the model in the app cache.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
 
@@ -909,7 +909,7 @@ struct SetupFlowCard: View {
                     SetupInstallRow(
                         icon: "waveform.badge.magnifyingglass",
                         state: appState.whisperSetupState,
-                        primaryTitle: "Set Up Whisper (1.5 GB)",
+                        primaryTitle: "Install Medium English (1.5 GB)",
                         primaryAction: { appState.downloadWhisperSetup() },
                         secondaryTitle: "Reveal",
                         secondaryAction: { appState.revealWhisperFiles() },

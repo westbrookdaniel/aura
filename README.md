@@ -4,21 +4,17 @@ Aura is a small macOS menu bar dictation app built in Swift. Hold a shortcut, sp
 
 ## Requirements
 
-- macOS 13+
+- macOS 13.3+
 - Swift 6 command line tools or Xcode
 
-These will be installed via homebrew when using the app:
+The first build fetches the precompiled `whisper.cpp` XCFramework through SwiftPM.
+The app stores its working model in:
 
-- `whisper-cli`
+- `~/Library/Caches/Aura/Models/ggml-medium.en.bin`
 
-The app also downloads:
+If no bundled or migrated model is available, the app downloads:
 
 - `ggml-medium.en.bin`
-
-Default paths:
-
-- `/opt/homebrew/bin/whisper-cli`
-- `~/Library/Application Support/Aura/ggml-medium.en.bin`
 
 ## Run
 
@@ -31,6 +27,8 @@ swift run
 ```bash
 ./scripts/build-app.sh
 ```
+
+If `ggml-medium.en.bin` already exists in `~/Library/Caches/Aura/Models` or `~/Library/Application Support/Aura`, the build script bundles it into the app automatically.
 
 Output:
 

@@ -61,7 +61,7 @@ final class AppState: ObservableObject {
         shortcutMonitor: ShortcutMonitor = ShortcutMonitor(),
         overlayController: OverlayPanelController = OverlayPanelController(),
         audioRecorder: AudioRecorder = AudioRecorder(),
-        transcriptionEngine: TranscriptionEngine = WhisperCLITranscriptionEngine(),
+        transcriptionEngine: TranscriptionEngine = WhisperCPPTranscriptionEngine(),
         insertionService: TextInsertionService = PasteTextInsertionService()
     ) {
         self.preferences = preferences
@@ -78,6 +78,9 @@ final class AppState: ObservableObject {
     func start() {
         refreshPermissions()
         refreshMicrophones()
+        Task { [weak self] in
+            await self?.synchronizeWhisperModelLocation()
+        }
         isLaunchAtLoginEnabled = LaunchAtLoginController.shared.isEnabled
         overlayController.updateAuraColor(preferences.auraColor)
         applyAppearance(preferences.appearance)
@@ -107,10 +110,6 @@ final class AppState: ObservableObject {
     func updateShortcut(_ shortcut: ShortcutSpec) {
         preferences.shortcut = shortcut
         shortcutMonitor.updateShortcut(shortcut)
-    }
-
-    func updateWhisperBinaryPath(_ path: String) {
-        preferences.whisperBinaryPath = path
     }
 
     func refreshMicrophones() {
@@ -164,25 +163,16 @@ final class AppState: ObservableObject {
     func downloadWhisperSetup() {
         Task {
             do {
-                let binaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-                if !FileManager.default.isExecutableFile(atPath: binaryPath) {
-                    await MainActor.run {
-                        whisperSetupState = .working(message: "Preparing whisper.cpp install...", progress: nil)
-                    }
-                    let installedCLIPath = try await WhisperInstallService.installCLI { stage in
+                await MainActor.run {
+                    whisperSetupState = .working(message: "Preparing Medium English...", progress: nil)
+                }
+                let path = try await WhisperInstallService.prepareBaseModel(
+                    onStageChange: { stage in
                         Task { @MainActor in
                             self.whisperSetupState = .working(message: stage, progress: nil)
                         }
-                    }
-                    await MainActor.run {
-                        preferences.whisperBinaryPath = installedCLIPath
-                    }
-                }
-
-                await MainActor.run {
-                    whisperSetupState = .working(message: "Starting Medium English download...", progress: 0)
-                }
-                let path = try await WhisperInstallService.downloadBaseModel { progress in
+                    },
+                    onProgress: { progress in
                     let percentage = Int((progress * 100).rounded())
                     Task { @MainActor in
                         self.whisperSetupState = .working(
@@ -190,7 +180,8 @@ final class AppState: ObservableObject {
                             progress: progress
                         )
                     }
-                }
+                    }
+                )
                 await MainActor.run {
                     preferences.modelPath = path
                     whisperSetupState = .success("Medium English is ready")
@@ -206,9 +197,7 @@ final class AppState: ObservableObject {
 
     func revealWhisperFiles() {
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let binaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-        let urls = [binaryPath, modelPath]
-            .map(URL.init(fileURLWithPath:))
+        let urls = [URL(fileURLWithPath: modelPath)]
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -319,15 +308,29 @@ final class AppState: ObservableObject {
         refreshInstallStatus()
     }
 
+    private func synchronizeWhisperModelLocation() async {
+        do {
+            let synchronizedPath = try await Task.detached(priority: .utility) {
+                try WhisperInstallService.synchronizeModelLocationIfNeeded()
+            }.value
+
+            if let synchronizedPath {
+                preferences.modelPath = synchronizedPath
+            }
+
+            refreshInstallStatus()
+        } catch {
+            refreshInstallStatus()
+        }
+    }
+
     private func refreshInstallStatus() {
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
-        let hasCLI = FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
         let hasModel = FileManager.default.fileExists(atPath: modelPath)
 
         if case .working = whisperSetupState {
         } else {
-            whisperSetupState = hasCLI && hasModel ? .success("Medium English is ready") : .idle
+            whisperSetupState = hasModel ? .success("Medium English is ready") : .idle
         }
 
         if isSetupComplete == false {
@@ -504,11 +507,9 @@ final class AppState: ObservableObject {
 
     var isSetupComplete: Bool {
         let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let whisperBinaryPath = NSString(string: preferences.whisperBinaryPath).expandingTildeInPath
 
         return permissionState.microphone == .granted
             && permissionState.accessibility == .granted
-            && FileManager.default.isExecutableFile(atPath: whisperBinaryPath)
             && FileManager.default.fileExists(atPath: modelPath)
     }
 }

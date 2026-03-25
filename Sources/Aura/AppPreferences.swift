@@ -72,10 +72,6 @@ final class AppPreferencesStore: ObservableObject {
         didSet { save(shortcut, key: Keys.shortcut) }
     }
 
-    @Published var whisperBinaryPath: String {
-        didSet { defaults.set(whisperBinaryPath, forKey: Keys.whisperBinaryPath) }
-    }
-
     @Published var modelPath: String {
         didSet { defaults.set(modelPath, forKey: Keys.modelPath) }
     }
@@ -108,7 +104,6 @@ final class AppPreferencesStore: ObservableObject {
 
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
-            whisperBinaryPath: whisperBinaryPath,
             modelPath: modelPath
         )
     }
@@ -118,7 +113,6 @@ final class AppPreferencesStore: ObservableObject {
 
     private enum Keys {
         static let shortcut = "shortcut"
-        static let whisperBinaryPath = "whisperBinaryPath"
         static let modelPath = "modelPath"
         static let selectedMicrophoneID = "selectedMicrophoneID"
         static let voiceTextHistory = "voiceTextHistory"
@@ -131,7 +125,6 @@ final class AppPreferencesStore: ObservableObject {
 
     private init() {
         shortcut = Self.decode(Keys.shortcut) ?? .default
-        whisperBinaryPath = defaults.string(forKey: Keys.whisperBinaryPath) ?? "/opt/homebrew/bin/whisper-cli"
         let expectedModelPath = WhisperInstallService.expectedModelPath()
         let storedModelPath = defaults.string(forKey: Keys.modelPath)
         if let storedModelPath,

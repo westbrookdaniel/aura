@@ -118,7 +118,6 @@ struct EventModifiers: OptionSet, Codable, Equatable {
 }
 
 struct TranscriptionConfiguration: Equatable {
-    var whisperBinaryPath: String
     var modelPath: String
 }
 
