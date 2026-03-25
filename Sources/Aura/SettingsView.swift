@@ -384,12 +384,6 @@ private struct SettingsDetailView: View {
                                 Text(option.label).tag(option)
                             }
                         }
-
-                        Picker("Orb Appearance", selection: orbAppearanceBinding) {
-                            ForEach(OrbAppearanceOption.allCases) { option in
-                                Text(option.label).tag(option)
-                            }
-                        }
                     }
                 }
 
@@ -459,13 +453,6 @@ private struct SettingsDetailView: View {
         Binding(
             get: { appState.preferences.appearance },
             set: { appState.preferences.appearance = $0 }
-        )
-    }
-
-    private var orbAppearanceBinding: Binding<OrbAppearanceOption> {
-        Binding(
-            get: { appState.preferences.orbAppearance },
-            set: { appState.preferences.orbAppearance = $0 }
         )
     }
 

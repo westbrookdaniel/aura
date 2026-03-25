@@ -15,6 +15,20 @@ final class RecorderOverlayVisualState: ObservableObject {
 
 struct RecorderOverlayView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @State private var loadingPulse = false
+
+    private struct AuraMetrics {
+        let outerSize: CGSize
+        let innerSize: CGSize
+        let radialEndRadius: CGFloat
+        let outerBlur: CGFloat
+        let innerBlur: CGFloat
+        let outerOpacity: CGFloat
+        let innerOpacity: CGFloat
+        let xScale: CGFloat
+        let yScale: CGFloat
+        let yOffset: CGFloat
+    }
 
     enum AlertSeverity: Equatable {
         case warning
@@ -30,29 +44,20 @@ struct RecorderOverlayView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            listeningAura
-                .opacity(auraOpacity)
-
             switch visualState.state {
             case .recording(let isProcessing):
-                ZStack {
-                    Circle()
-                        .fill(recordingDotColor)
-                        .scaleEffect(scale)
-                        .animation(.easeInOut(duration: 0.10), value: scale)
-                        .frame(width: indicatorDiameter, height: indicatorDiameter)
-                        .shadow(color: dotShadowColor, radius: 6, y: 0)
-                        .shadow(color: dotShadowColor, radius: dotShadowRadius)
-
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(processingTintColor)
-                        .scaleEffect(0.5)
-                        .opacity(isProcessing ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.18), value: isProcessing)
-                }
-                .padding(indicatorPadding)
-                .padding(.bottom, 26)
+                listeningAura(isProcessing: isProcessing)
+                    .opacity(auraDisplayOpacity(isProcessing: isProcessing))
+                    .scaleEffect(loadingScale(isProcessing: isProcessing), anchor: .bottom)
+                    .animation(.easeInOut(duration: 0.12), value: recordingLevel)
+                    .animation(.easeInOut(duration: 0.20), value: isProcessing)
+                    .animation(.easeInOut(duration: 0.82), value: loadingPulse)
+                    .onAppear {
+                        updateLoadingPulse(isProcessing)
+                    }
+                    .onChange(of: isProcessing) { newValue in
+                        updateLoadingPulse(newValue)
+                    }
             case .alert(let message, _):
                 Text(message)
                     .font(.system(size: 12, weight: .semibold))
@@ -65,6 +70,7 @@ struct RecorderOverlayView: View {
                     )
                     .shadow(color: alertShadowColor, radius: 20, y: 8)
                     .padding(.bottom, 10)
+                    .offset(y: 18)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -79,78 +85,60 @@ struct RecorderOverlayView: View {
         }
     }
 
-    private var listeningAura: some View {
-        ZStack(alignment: .bottom) {
+    private func listeningAura(isProcessing: Bool) -> some View {
+        let metrics = auraMetrics(isProcessing: isProcessing)
+
+        return ZStack(alignment: .bottom) {
             Ellipse()
                 .fill(
                     RadialGradient(
                         colors: [
-                            theme.overlay.radialInner.color.opacity(0.98),
-                            theme.overlay.radialMiddle.color.opacity(0.66),
-                            theme.overlay.radialOuter.color.opacity(0.08)
+                            theme.overlay.radialInner.color.opacity(metrics.outerOpacity),
+                            theme.overlay.radialMiddle.color.opacity(metrics.innerOpacity),
+                            theme.overlay.radialOuter.color.opacity(isProcessing ? 0.18 : 0.08)
                         ],
                         center: .center,
                         startRadius: 16,
-                        endRadius: 170
+                        endRadius: metrics.radialEndRadius
                     )
                 )
-                .frame(width: 416, height: 234)
-                .blur(radius: 22)
+                .frame(width: metrics.outerSize.width, height: metrics.outerSize.height)
+                .blur(radius: metrics.outerBlur)
+                .shadow(color: auraShadowColor(isProcessing: isProcessing), radius: isProcessing ? 22 : 34, y: isProcessing ? 0 : -4)
 
             Ellipse()
                 .fill(
                     LinearGradient(
                         colors: [
-                            theme.overlay.baseInner.color.opacity(0.88),
-                            theme.overlay.baseOuter.color.opacity(0.40),
+                            theme.overlay.baseInner.color.opacity(metrics.outerOpacity),
+                            theme.overlay.baseOuter.color.opacity(isProcessing ? 0.74 : 0.40),
                             .clear
                         ],
                         startPoint: .bottom,
                         endPoint: .top
                     )
                 )
-                .frame(width: 343, height: 166)
-                .blur(radius: 14)
+                .frame(width: metrics.innerSize.width, height: metrics.innerSize.height)
+                .blur(radius: metrics.innerBlur)
         }
-        .scaleEffect(0.5, anchor: .bottom)
-        .offset(y: 110)
+        .scaleEffect(x: metrics.xScale, y: metrics.yScale, anchor: .bottom)
+        .offset(y: metrics.yOffset)
         .allowsHitTesting(false)
     }
 
-    private var scale: CGFloat {
-        switch visualState.state {
-        case .recording(false):
-            let clampedLevel = min(max(visualState.level, 0), 1)
-            return interpolatedRecordingScale(for: clampedLevel)
-        case .recording(true):
-            return 1
-        case .alert:
-            return 1
-        }
+    private var recordingLevel: CGFloat {
+        guard case .recording(false) = visualState.state else { return 0 }
+        return min(max(visualState.level, 0), 1)
     }
 
-    private var dotShadowColor: Color {
-        theme.loadingTint(for: colorScheme).opacity(0.2)
+    private func auraDisplayOpacity(isProcessing: Bool) -> CGFloat {
+        guard isProcessing else { return auraOpacity }
+        return loadingPulse ? 0.94 : 0.84
     }
 
-    private var dotShadowRadius: CGFloat {
-        28
-    }
-
-    private var indicatorDiameter: CGFloat {
-        28
-    }
-
-    private var indicatorPadding: CGFloat {
-        2
-    }
-
-    private var recordingDotColor: Color {
-        theme.neutralSurface(for: colorScheme, emphasized: true)
-    }
-
-    private var processingTintColor: Color {
-        theme.loadingTint(for: colorScheme)
+    private func loadingScale(isProcessing: Bool) -> CGFloat {
+        guard isProcessing else { return 1 }
+        return loadingPulse ? 1.02 : 0.98
     }
 
     private var alertSeverity: AlertSeverity {
@@ -206,18 +194,62 @@ struct RecorderOverlayView: View {
         visualState.auraColor.theme
     }
 
-    private func interpolatedRecordingScale(for level: CGFloat) -> CGFloat {
-        let minScale: CGFloat = 0.5
-        let midScale: CGFloat = 1.4
-        let maxScale: CGFloat = 1.8
-
-        if level <= 0.4 {
-            let progress = level / 0.4
-            return minScale + (midScale - minScale) * progress
+    private func auraMetrics(isProcessing: Bool) -> AuraMetrics {
+        if isProcessing {
+            return AuraMetrics(
+                outerSize: CGSize(width: 416, height: 234),
+                innerSize: CGSize(width: 343, height: 166),
+                radialEndRadius: 170,
+                outerBlur: 22,
+                innerBlur: 14,
+                outerOpacity: 0.94,
+                innerOpacity: 0.74,
+                xScale: 0.54,
+                yScale: 0.44,
+                yOffset: 112
+            )
         }
 
-        let progress = (level - 0.4) / 0.6
-        return midScale + (maxScale - midScale) * progress
+        let level = recordingLevel
+        return AuraMetrics(
+            outerSize: CGSize(
+                width: 416 + (level * 108),
+                height: 234 + (level * 42)
+            ),
+            innerSize: CGSize(
+                width: 343 + (level * 84),
+                height: 166 + (level * 36)
+            ),
+            radialEndRadius: 170 + (level * 34),
+            outerBlur: 22 + (level * 5),
+            innerBlur: 14 + (level * 3),
+            outerOpacity: 0.98,
+            innerOpacity: 0.66 + (level * 0.14),
+            xScale: 0.54 + (level * 0.20),
+            yScale: 0.44 + (level * 0.28),
+            yOffset: 112 - (level * 18)
+        )
     }
 
+    private func auraShadowColor(isProcessing: Bool) -> Color {
+        if isProcessing {
+            return theme.overlay.shadow.color.opacity(0.50)
+        }
+
+        return theme.overlay.shadow.color.opacity(0.32 + (recordingLevel * 0.12))
+    }
+
+    private func updateLoadingPulse(_ isProcessing: Bool) {
+        guard isProcessing else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                loadingPulse = false
+            }
+            return
+        }
+
+        loadingPulse = false
+        withAnimation(.easeInOut(duration: 0.82).repeatForever(autoreverses: true)) {
+            loadingPulse = true
+        }
+    }
 }

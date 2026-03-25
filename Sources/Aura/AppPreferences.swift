@@ -45,25 +45,6 @@ enum AppAppearanceOption: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum OrbAppearanceOption: String, Codable, CaseIterable, Identifiable {
-    case inherit
-    case light
-    case dark
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .inherit:
-            return "Inherit"
-        case .light:
-            return "Always Light"
-        case .dark:
-            return "Always Dark"
-        }
-    }
-}
-
 @MainActor
 final class AppPreferencesStore: ObservableObject {
     static let shared = AppPreferencesStore()
@@ -102,10 +83,6 @@ final class AppPreferencesStore: ObservableObject {
         didSet { save(appearance, key: Keys.appearance) }
     }
 
-    @Published var orbAppearance: OrbAppearanceOption {
-        didSet { save(orbAppearance, key: Keys.orbAppearance) }
-    }
-
     var transcriptionConfiguration: TranscriptionConfiguration {
         TranscriptionConfiguration(
             modelPath: modelPath
@@ -123,7 +100,6 @@ final class AppPreferencesStore: ObservableObject {
         static let voiceTextHistory = "voiceTextHistory"
         static let auraColor = "auraColor"
         static let appearance = "appearance"
-        static let orbAppearance = "orbAppearance"
     }
 
     private static let maxVoiceTextHistoryCount = 200
@@ -151,7 +127,6 @@ final class AppPreferencesStore: ObservableObject {
         voiceTextHistory = Self.decode(Keys.voiceTextHistory) ?? []
         auraColor = Self.decode(Keys.auraColor) ?? .aqua
         appearance = Self.decode(Keys.appearance) ?? .system
-        orbAppearance = Self.decode(Keys.orbAppearance) ?? .light
     }
 
     func addVoiceTextHistoryItem(_ item: VoiceTextHistoryItem) {
