@@ -257,12 +257,14 @@ if git -C "${ROOT_DIR}" diff --cached --quiet; then
 fi
 
 git -C "${ROOT_DIR}" commit -m "${COMMIT_MESSAGE}"
+RELEASE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 
-echo "Creating annotated tag ${TAG_NAME}..."
-git -C "${ROOT_DIR}" tag -a "${TAG_NAME}" -m "${TAG_MESSAGE}"
+echo "Creating annotated tag ${TAG_NAME} on ${RELEASE_COMMIT}..."
+git -C "${ROOT_DIR}" tag -a "${TAG_NAME}" "${RELEASE_COMMIT}" -m "${TAG_MESSAGE}"
 
 echo
 echo "Release commit and tag created successfully:"
+echo "  commit: ${RELEASE_COMMIT}"
 echo "  commit message: ${COMMIT_MESSAGE}"
 echo "  tag: ${TAG_NAME}"
 echo
