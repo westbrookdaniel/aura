@@ -4,16 +4,16 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
+    private static let windowSize = NSSize(width: 980, height: 760)
 
     private init() {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Aura"
-        window.setContentSize(NSSize(width: 980, height: 760))
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.center()
+        Self.configureFrame(for: window)
         super.init(window: window)
         window.delegate = self
     }
@@ -26,12 +26,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func show(appState: AppState) {
         let rootView = SettingsView()
             .environmentObject(appState)
-            .frame(width: 980, height: 760)
+            .frame(width: Self.windowSize.width, height: Self.windowSize.height)
         let hostingController = NSHostingController(rootView: AnyView(rootView))
         contentViewController = hostingController
         updateAppearance(appState.preferences.appearance.nsAppearance)
+        if let window {
+            Self.configureFrame(for: window)
+        }
         window?.makeKeyAndOrderFront(nil)
-        window?.center()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -42,5 +44,24 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         window?.orderOut(nil)
+    }
+
+    private static func configureFrame(for window: NSWindow) {
+        window.setContentSize(Self.windowSize)
+
+        guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            window.center()
+            return
+        }
+
+        let visibleFrame = screen.visibleFrame
+        let frame = window.frame
+        let centeredFrame = NSRect(
+            x: visibleFrame.midX - (frame.width / 2),
+            y: visibleFrame.midY - (frame.height / 2),
+            width: frame.width,
+            height: frame.height
+        )
+        window.setFrame(centeredFrame, display: false)
     }
 }

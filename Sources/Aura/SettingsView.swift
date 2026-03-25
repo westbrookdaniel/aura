@@ -204,11 +204,11 @@ private struct SidebarDestinationButton: View {
     }
 
     private var selectedTextColor: Color {
-        colorScheme == .dark ? .white.opacity(0.94) : theme.accentText.color
+        colorScheme == .dark ? .white.opacity(0.94) : .black.opacity(0.9)
     }
 
     private var defaultTextColor: Color {
-        colorScheme == .dark ? .white.opacity(0.88) : theme.accentText.color
+        colorScheme == .dark ? .white.opacity(0.88) : .black.opacity(0.78)
     }
 
     private var activeBackground: Color {
