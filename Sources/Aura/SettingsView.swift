@@ -501,7 +501,7 @@ private struct UpdateSettingsCard: View {
 
     var body: some View {
         SettingsCard(theme: theme) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Automatic Updates")
