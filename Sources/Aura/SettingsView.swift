@@ -82,9 +82,57 @@ enum HistorySectionBuilder {
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedDestination: SettingsDestination = .settings
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        ZStack {
+            settingsContent
+                .blur(radius: setupOverlayIsVisible ? 4 : 0)
+                .disabled(setupOverlayIsVisible)
+
+            if setupOverlayIsVisible {
+                SetupFlowOverlay(
+                    appState: appState,
+                    theme: theme,
+                    canDismiss: appState.hasRequiredPermissions,
+                    onDismiss: { appState.dismissSetupOverlay() }
+                )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(1)
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .preferredColorScheme(preferredColorScheme)
+        .animation(.easeInOut(duration: 0.22), value: setupOverlayIsVisible)
+        .onAppear {
+            selectedDestination = appState.requiresPermissionSetup ? .settings : .history
+        }
+        .onChange(of: appState.requiresPermissionSetup) { requiresPermissionSetup in
+            if requiresPermissionSetup {
+                selectedDestination = .settings
+            }
+        }
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appState.preferences.appearance {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
+    }
+
+    private var theme: AuraTheme {
+        appState.preferences.auraColor.theme
+    }
+
+    private var setupOverlayIsVisible: Bool {
+        appState.shouldShowSetupOverlay
+    }
+
+    private var settingsContent: some View {
         HStack(spacing: 0) {
             SettingsSidebar(
                 selectedDestination: $selectedDestination,
@@ -104,26 +152,6 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .preferredColorScheme(preferredColorScheme)
-        .onAppear {
-            selectedDestination = appState.isSetupComplete ? .history : .settings
-        }
-    }
-
-    private var preferredColorScheme: ColorScheme? {
-        switch appState.preferences.appearance {
-        case .system:
-            return nil
-        case .light:
-            return .light
-        case .dark:
-            return .dark
-        }
-    }
-
-    private var theme: AuraTheme {
-        appState.preferences.auraColor.theme
     }
 }
 
@@ -293,8 +321,6 @@ private struct SettingsDetailView: View {
                     )
                 }
 
-                SetupFlowCard(appState: appState, theme: theme)
-
                 SettingsCard(theme: theme) {
                     VStack(alignment: .leading, spacing: 18) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -370,6 +396,15 @@ private struct SettingsDetailView: View {
 
                 HStack {
                     Spacer()
+
+                    Button(action: appState.presentSetupOverlay) {
+                        Label("Redo Setup", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
 
                     Button(action: appState.openTranscriptionsFolder) {
                         Label("Debug Transcriptions", systemImage: "folder")
@@ -813,6 +848,63 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
+private struct SetupFlowOverlay: View {
+    @ObservedObject var appState: AppState
+    let theme: AuraTheme
+    let canDismiss: Bool
+    let onDismiss: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            overlayBackground
+
+            SetupFlowCard(
+                appState: appState,
+                theme: theme,
+                canDismiss: canDismiss,
+                onDismiss: onDismiss
+            )
+                .frame(maxWidth: 560)
+                .shadow(
+                    color: theme.shadow.color.opacity(colorScheme == .dark ? 0.30 : 0.18),
+                    radius: 28,
+                    x: 0,
+                    y: 18
+                )
+                .padding(.horizontal, 32)
+                .padding(.vertical, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var overlayBackground: some View {
+        ZStack {
+            LinearGradient(
+                colors: theme.setupGradient(for: colorScheme),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .opacity(colorScheme == .dark ? 0.92 : 0.96)
+
+            RadialGradient(
+                colors: [
+                    theme.accentStrong.color.opacity(colorScheme == .dark ? 0.28 : 0.18),
+                    Color.clear
+                ],
+                center: .topTrailing,
+                startRadius: 18,
+                endRadius: 520
+            )
+
+            Rectangle()
+                .fill(Color.black.opacity(colorScheme == .dark ? 0.22 : 0.06))
+        }
+        .ignoresSafeArea()
+    }
+}
+
 struct SettingsWarningCard: View {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -874,85 +966,52 @@ struct SettingsWarningCard: View {
 struct SetupFlowCard: View {
     @ObservedObject var appState: AppState
     let theme: AuraTheme
-    @Environment(\.colorScheme) private var colorScheme
+    let canDismiss: Bool
+    let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 4) {
-                SetupPermissionRow(
-                    icon: "mic.fill",
-                    status: appState.permissionState.microphone,
-                    primaryAction: { Task { await appState.requestMicrophonePermission() } },
-                    secondaryAction: { appState.openAccessibilitySettings() },
-                    primaryTitle: "Request Microphone",
-                    secondaryTitle: "Go to System Settings",
-                    theme: theme
-                )
+        SettingsCard(theme: theme, contentPadding: 24) {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Lets get you setup")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                }
 
-                SetupPermissionRow(
-                    icon: "figure.wave.circle.fill",
-                    status: appState.permissionState.accessibility,
-                    primaryAction: { appState.requestAccessibilityPermission() },
-                    secondaryAction: { appState.openAccessibilitySettings() },
-                    primaryTitle: "Prompt Accessibility",
-                    secondaryTitle: "Go to System Settings",
-                    theme: theme
-                )
-            }
+                VStack(alignment: .leading, spacing: 14) {
+                    SetupPermissionRow(
+                        icon: "mic.fill",
+                        title: "Microphone Access",
+                        message: "Allows Aura to capture audio directly from your selected microphone.",
+                        status: appState.permissionState.microphone,
+                        primaryAction: { Task { await appState.requestMicrophonePermission() } },
+                        secondaryAction: { appState.openMicrophoneSettings() },
+                        primaryTitle: "Request Access",
+                        secondaryTitle: "Open System Settings",
+                        theme: theme
+                    )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Aura bundles whisper.cpp directly and keeps the model in the app cache.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    SetupInstallRow(
-                        icon: "waveform.badge.magnifyingglass",
-                        state: appState.whisperSetupState,
-                        primaryTitle: "Install Medium English (1.5 GB)",
-                        primaryAction: { appState.downloadWhisperSetup() },
-                        secondaryTitle: "Reveal",
-                        secondaryAction: { appState.revealWhisperFiles() },
+                    SetupPermissionRow(
+                        icon: "figure.wave.circle.fill",
+                        title: "Accessibility Access",
+                        message: "Lets Aura insert the transcript into the app where your cursor is currently focused.",
+                        status: appState.permissionState.accessibility,
+                        primaryAction: { appState.requestAccessibilityPermission() },
+                        secondaryAction: { appState.openAccessibilitySettings() },
+                        primaryTitle: "Prompt for Access",
+                        secondaryTitle: "Open System Settings",
                         theme: theme
                     )
                 }
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    if canDismiss {
+                        Button("Dismiss", action: onDismiss)
+                            .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
+                    }
+                }
             }
         }
-        .padding(22)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: backgroundGradient,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(borderColor, lineWidth: 1)
-                )
-        )
-    }
-
-    private var backgroundGradient: [Color] {
-        if colorScheme == .dark {
-            return [
-                theme.overlay.baseOuter.color.opacity(0.20),
-                ThemeColor(red: 0.10, green: 0.10, blue: 0.10, opacity: 0.96).color,
-                ThemeColor(red: 0.08, green: 0.08, blue: 0.08, opacity: 0.98).color
-            ]
-        }
-
-        return theme.setupGradient(for: colorScheme)
-    }
-
-    private var borderColor: Color {
-        if colorScheme == .dark {
-            return theme.setupBorder(for: colorScheme).opacity(0.74)
-        }
-
-        return theme.setupBorder(for: colorScheme)
     }
 }
 
@@ -1070,6 +1129,8 @@ struct SettingsPrimaryButtonStyle: ButtonStyle {
 
 struct SetupPermissionRow: View {
     let icon: String
+    let title: String
+    let message: String
     let status: PermissionAuthorization
     let primaryAction: () -> Void
     let secondaryAction: () -> Void
@@ -1077,47 +1138,56 @@ struct SetupPermissionRow: View {
     let secondaryTitle: String
     let theme: AuraTheme
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                Button(primaryTitle, systemImage: icon, action: primaryAction)
-                    .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
-                Button(secondaryTitle, action: secondaryAction)
-                    .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
-                Spacer()
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(theme.accentStrong.color.opacity(colorScheme == .dark ? 0.20 : 0.12))
+
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(theme.accentStrong.color)
+                }
+                .frame(width: 36, height: 36)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+
+                    Text(message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
                 PermissionStatusBadge(status: status, theme: theme)
             }
+
+            if status != .granted {
+                HStack(spacing: 10) {
+                    Button(primaryTitle, action: primaryAction)
+                        .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
+
+                    Button(secondaryTitle, action: secondaryAction)
+                        .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
+                }
+            }
         }
-        .padding(.vertical, 4)
-    }
-}
-
-struct SetupInstallRow: View {
-    let icon: String
-    let state: InstallProgressState
-    let primaryTitle: String
-    let primaryAction: () -> Void
-    let secondaryTitle: String
-    let secondaryAction: () -> Void
-    let theme: AuraTheme
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button(primaryTitle, systemImage: icon, action: primaryAction)
-                .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
-                .disabled(isWorking)
-            Button(secondaryTitle, action: secondaryAction)
-                .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
-
-            Spacer()
-            InstallStatusBadge(state: state, theme: theme)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var isWorking: Bool {
-        if case .working = state { return true }
-        return false
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(theme.historyRowFill(for: colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(theme.historyRowBorder(for: colorScheme), lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -1175,98 +1245,6 @@ struct PermissionStatusBadge: View {
         }
 
         return theme.badgePalette(for: status).foreground.color
-    }
-}
-
-struct InstallStatusBadge: View {
-    let state: InstallProgressState
-    let theme: AuraTheme
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if isWorking {
-                if let progress {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                        .tint(foregroundColor)
-                        .frame(width: 36)
-                        .scaleEffect(x: 1, y: 0.7, anchor: .center)
-                } else {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.mini)
-                        .tint(foregroundColor)
-                }
-            } else {
-                Image(systemName: icon)
-            }
-
-            Text(title)
-                .lineLimit(1)
-        }
-        .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(foregroundColor)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(backgroundColor)
-        )
-    }
-
-    private var title: String {
-        switch state {
-        case .idle:
-            return "Not Installed"
-        case .working(let message, _):
-            return message
-        case .success:
-            return "Ready"
-        case .failure:
-            return "Failed"
-        }
-    }
-
-    private var progress: Double? {
-        state.progress
-    }
-
-    private var icon: String {
-        switch state {
-        case .idle:
-            return "arrow.down.circle"
-        case .working:
-            return "ellipsis"
-        case .success:
-            return "checkmark"
-        case .failure:
-            return "exclamationmark"
-        }
-    }
-
-    private var isWorking: Bool {
-        if case .working = state {
-            return true
-        }
-        return false
-    }
-
-    private var backgroundColor: Color {
-        if colorScheme == .dark {
-            return theme.badgePalette(for: state).foreground.color.opacity(0.18)
-        }
-
-        return theme.badgePalette(for: state).background.color
-    }
-
-    private var foregroundColor: Color {
-        if colorScheme == .dark {
-            return theme.badgePalette(for: state).background.color
-        }
-
-        return theme.badgePalette(for: state).foreground.color
     }
 }
 

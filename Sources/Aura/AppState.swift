@@ -37,8 +37,7 @@ final class AppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var isSettingsPresented = false
     @Published var isLaunchAtLoginEnabled = false
-    @Published var isSetupFlowPresented = false
-    @Published var whisperSetupState: InstallProgressState = .idle
+    @Published var isSetupOverlayPresented = false
     @Published var availableMicrophones: [MicrophoneDevice] = []
 
     let preferences: AppPreferencesStore
@@ -145,6 +144,10 @@ final class AppState: ObservableObject {
         permissionsManager.openAccessibilitySettings()
     }
 
+    func openMicrophoneSettings() {
+        permissionsManager.openMicrophoneSettings()
+    }
+
     func requestAccessibilityPermission() {
         permissionsManager.requestAccessibilityAccess()
         refreshPermissions()
@@ -160,49 +163,6 @@ final class AppState: ObservableObject {
         refreshPermissions()
     }
 
-    func downloadWhisperSetup() {
-        Task {
-            do {
-                await MainActor.run {
-                    whisperSetupState = .working(message: "Preparing Medium English...", progress: nil)
-                }
-                let path = try await WhisperInstallService.prepareBaseModel(
-                    onStageChange: { stage in
-                        Task { @MainActor in
-                            self.whisperSetupState = .working(message: stage, progress: nil)
-                        }
-                    },
-                    onProgress: { progress in
-                    let percentage = Int((progress * 100).rounded())
-                    Task { @MainActor in
-                        self.whisperSetupState = .working(
-                            message: "Downloading Medium English... \(percentage)%",
-                            progress: progress
-                        )
-                    }
-                    }
-                )
-                await MainActor.run {
-                    preferences.modelPath = path
-                    whisperSetupState = .success("Medium English is ready")
-                }
-            } catch {
-                await MainActor.run {
-                    whisperSetupState = .failure(error.localizedDescription)
-                    reportError(error.localizedDescription)
-                }
-            }
-        }
-    }
-
-    func revealWhisperFiles() {
-        let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let urls = [URL(fileURLWithPath: modelPath)]
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !urls.isEmpty else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(urls)
-    }
-
     func openTranscriptionsFolder() {
         NSWorkspace.shared.open(FileManager.default.temporaryDirectory)
     }
@@ -214,14 +174,17 @@ final class AppState: ObservableObject {
     func openSettingsWindow() {
         refreshPermissions()
         refreshMicrophones()
-        isSetupFlowPresented = !isSetupComplete
         SettingsWindowController.shared.show(appState: self)
     }
 
-    func reopenSetupFlow() {
+    func presentSetupOverlay() {
         refreshPermissions()
         refreshMicrophones()
-        isSetupFlowPresented = true
+        isSetupOverlayPresented = true
+    }
+
+    func dismissSetupOverlay() {
+        isSetupOverlayPresented = false
     }
 
     func clearVoiceTextHistory() {
@@ -282,6 +245,14 @@ final class AppState: ObservableObject {
                 self?.applyOverlayAppearance()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshPermissions()
+                self?.refreshMicrophones()
+            }
+            .store(in: &cancellables)
     }
 
     private func applyAppearance(_ appearance: AppAppearanceOption) {
@@ -305,7 +276,6 @@ final class AppState: ObservableObject {
 
     private func refreshPermissions() {
         permissionState = permissionsManager.currentState()
-        refreshInstallStatus()
     }
 
     private func synchronizeWhisperModelLocation() async {
@@ -317,25 +287,7 @@ final class AppState: ObservableObject {
             if let synchronizedPath {
                 preferences.modelPath = synchronizedPath
             }
-
-            refreshInstallStatus()
-        } catch {
-            refreshInstallStatus()
-        }
-    }
-
-    private func refreshInstallStatus() {
-        let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-        let hasModel = FileManager.default.fileExists(atPath: modelPath)
-
-        if case .working = whisperSetupState {
-        } else {
-            whisperSetupState = hasModel ? .success("Medium English is ready") : .idle
-        }
-
-        if isSetupComplete == false {
-            isSetupFlowPresented = true
-        }
+        } catch {}
     }
 
     private func beginRecording() {
@@ -494,7 +446,9 @@ final class AppState: ObservableObject {
         }
 
         switch whisperError {
-        case .transcriptionOutputMissing(let message), .transcriptionFailed(let message):
+        case .transcriptionOutputMissing:
+            return true
+        case .transcriptionFailed(let message):
             let lowered = message.lowercased()
             return lowered.contains("failed to read audio file")
                 || lowered.contains("failed to read the frames of audio data")
@@ -505,12 +459,17 @@ final class AppState: ObservableObject {
         }
     }
 
-    var isSetupComplete: Bool {
-        let modelPath = NSString(string: preferences.modelPath).expandingTildeInPath
-
-        return permissionState.microphone == .granted
+    var hasRequiredPermissions: Bool {
+        permissionState.microphone == .granted
             && permissionState.accessibility == .granted
-            && FileManager.default.fileExists(atPath: modelPath)
+    }
+
+    var requiresPermissionSetup: Bool {
+        hasRequiredPermissions == false
+    }
+
+    var shouldShowSetupOverlay: Bool {
+        requiresPermissionSetup || isSetupOverlayPresented
     }
 }
 

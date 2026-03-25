@@ -33,7 +33,7 @@ actor WhisperCPPTranscriptionEngine: TranscriptionEngine {
 
         let samples = try loadSamples(from: audioURL)
         guard samples.isEmpty == false else {
-            throw WhisperEngineError.transcriptionOutputMissing("No readable audio samples were produced.")
+            return TranscriptionResult(text: "", analysis: nil)
         }
 
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
@@ -76,7 +76,7 @@ actor WhisperCPPTranscriptionEngine: TranscriptionEngine {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard transcript.isEmpty == false else {
-            throw WhisperEngineError.transcriptionOutputMissing("No readable transcript segments were produced.")
+            return TranscriptionResult(text: "", analysis: nil)
         }
 
         return TranscriptionResult(text: transcript, analysis: nil)

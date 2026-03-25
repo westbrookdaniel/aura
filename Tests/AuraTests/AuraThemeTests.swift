@@ -28,12 +28,12 @@ struct AuraThemeTests {
     }
 
     @Test
-    func workingBadgesFollowSelectedThemeWarningPalette() {
+    func permissionBadgesFollowSelectedThemePalette() {
         let aquaTheme = AuraColorOption.aqua.theme
         let slateTheme = AuraColorOption.slate.theme
 
-        #expect(aquaTheme.badgePalette(for: .working(message: "Installing", progress: 0.4)) == aquaTheme.warning)
-        #expect(slateTheme.badgePalette(for: .working(message: "Installing", progress: 0.4)) == slateTheme.warning)
-        #expect(aquaTheme.badgePalette(for: .working(message: "Installing", progress: 0.4)).foreground != slateTheme.badgePalette(for: .working(message: "Installing", progress: 0.4)).foreground)
+        #expect(aquaTheme.badgePalette(for: .granted) == aquaTheme.success)
+        #expect(slateTheme.badgePalette(for: .granted) == slateTheme.success)
+        #expect(aquaTheme.badgePalette(for: .granted).foreground != slateTheme.badgePalette(for: .granted).foreground)
     }
 }

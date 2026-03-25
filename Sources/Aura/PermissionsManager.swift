@@ -29,6 +29,10 @@ struct PermissionsManager {
         openSettingsPane(anchor: "Privacy_Accessibility")
     }
 
+    func openMicrophoneSettings() {
+        openSettingsPane(anchor: "Privacy_Microphone")
+    }
+
     private func openSettingsPane(anchor: String) {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") else { return }
         NSWorkspace.shared.open(url)

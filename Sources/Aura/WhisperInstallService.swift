@@ -1,30 +1,5 @@
 import Foundation
 
-enum InstallProgressState: Equatable {
-    case idle
-    case working(message: String, progress: Double?)
-    case success(String)
-    case failure(String)
-
-    var message: String {
-        switch self {
-        case .idle:
-            return ""
-        case .working(let message, _), .success(let message), .failure(let message):
-            return message
-        }
-    }
-
-    var progress: Double? {
-        switch self {
-        case .working(_, let progress):
-            return progress
-        case .idle, .success, .failure:
-            return nil
-        }
-    }
-}
-
 enum WhisperInstallService {
     static let mediumEnglishFilename = "ggml-medium.en.bin"
 

@@ -2,6 +2,7 @@
 import Foundation
 
 struct AudioPreprocessingConfiguration: Equatable, Codable {
+    var minimumOutputDuration: Double = 1.1
     var targetPeakNormal: Float = 0.55
     var targetPeakQuiet: Float = 0.72
     var silenceThreshold: Float = 0.008
@@ -57,9 +58,15 @@ enum AudioPreprocessor {
             ? samples
             : normalize(samples: samples, analysis: analysis, configuration: configuration)
         let targetSampleRate = 16_000.0
-        let outputSamples = resample(samples: normalized, from: inputFormat.sampleRate, to: targetSampleRate)
+        let outputSamples = padWithTrailingSilenceIfNeeded(
+            samples: resample(samples: normalized, from: inputFormat.sampleRate, to: targetSampleRate),
+            sampleRate: targetSampleRate,
+            minimumDuration: configuration.minimumOutputDuration
+        )
 
-        if analysis.profile == .mostlySilent, abs(inputFormat.sampleRate - targetSampleRate) < 0.5 {
+        if analysis.profile == .mostlySilent,
+           abs(inputFormat.sampleRate - targetSampleRate) < 0.5,
+           Double(samples.count) / inputFormat.sampleRate >= configuration.minimumOutputDuration {
             return PreprocessedAudioResult(fileURL: audioURL, analysis: analysis)
         }
 
@@ -236,6 +243,20 @@ enum AudioPreprocessor {
         }
 
         return output
+    }
+
+    private static func padWithTrailingSilenceIfNeeded(
+        samples: [Float],
+        sampleRate: Double,
+        minimumDuration: Double
+    ) -> [Float] {
+        guard samples.isEmpty == false else { return samples }
+        guard sampleRate > 0, minimumDuration > 0 else { return samples }
+
+        let minimumSampleCount = max(1, Int((minimumDuration * sampleRate).rounded()))
+        guard samples.count < minimumSampleCount else { return samples }
+
+        return samples + Array(repeating: 0, count: minimumSampleCount - samples.count)
     }
 }
 

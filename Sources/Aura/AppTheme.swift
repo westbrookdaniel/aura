@@ -194,19 +194,6 @@ struct AuraTheme: Equatable {
             return neutral
         }
     }
-
-    func badgePalette(for state: InstallProgressState) -> StatusPalette {
-        switch state {
-        case .success:
-            return success
-        case .failure:
-            return error
-        case .working:
-            return warning
-        case .idle:
-            return neutral
-        }
-    }
 }
 
 extension AuraColorOption {
