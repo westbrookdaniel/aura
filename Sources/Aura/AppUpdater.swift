@@ -62,10 +62,14 @@ final class AppUpdater: ObservableObject {
     @Published private(set) var allowsAutomaticUpdates = false
     @Published private(set) var unavailableReason: String?
 
+    let currentVersionDisplay: String
+
     private let updaterController: SPUStandardUpdaterController?
     private var cancellables = Set<AnyCancellable>()
 
     init(bundle: Bundle = .main) {
+        self.currentVersionDisplay = Self.versionDisplay(bundle: bundle)
+
         switch SparkleConfiguration.resolve(
             infoDictionary: bundle.infoDictionary ?? [:],
             bundleURL: bundle.bundleURL
@@ -167,5 +171,28 @@ final class AppUpdater: ObservableObject {
         }
 
         return value.boolValue
+    }
+
+    private static func versionDisplay(bundle: Bundle) -> String {
+        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let buildNumber = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let shortVersion, shortVersion.isEmpty == false,
+           let buildNumber, buildNumber.isEmpty == false,
+           buildNumber != shortVersion {
+            return "Current version \(shortVersion) (\(buildNumber))"
+        }
+
+        if let shortVersion, shortVersion.isEmpty == false {
+            return "Current version \(shortVersion)"
+        }
+
+        if let buildNumber, buildNumber.isEmpty == false {
+            return "Current version \(buildNumber)"
+        }
+
+        return "Current version unavailable"
     }
 }

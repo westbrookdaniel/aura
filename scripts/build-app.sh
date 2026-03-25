@@ -54,6 +54,17 @@ plist_bool() {
     esac
 }
 
+require_option_value() {
+    local option_name="$1"
+    local option_value="${2-}"
+
+    if [[ -z "${option_value}" || "${option_value}" == --* ]]; then
+        echo "Option ${option_name} requires a value." >&2
+        usage >&2
+        exit 1
+    fi
+}
+
 find_framework_named() {
     local framework_name="$1"
     shift
@@ -79,8 +90,8 @@ embed_linked_frameworks() {
     local framework_name
     local framework_source
     local search_roots=(
-        "${SCRATCH_DIR}"
         "$(dirname "${binary_path}")"
+        "${SCRATCH_DIR}"
         "${ROOT_DIR}/.build"
         "${ROOT_DIR}/.build/checkouts"
         "${ROOT_DIR}/.build/artifacts"
@@ -151,27 +162,33 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --bundle-id)
+            require_option_value "$1" "${2-}"
             BUNDLE_ID="$2"
             shift 2
             ;;
         --version)
+            require_option_value "$1" "${2-}"
             VERSION="$2"
             SHORT_VERSION="${SHORT_VERSION:-$2}"
             shift 2
             ;;
         --short-version)
+            require_option_value "$1" "${2-}"
             SHORT_VERSION="$2"
             shift 2
             ;;
         --sign)
+            require_option_value "$1" "${2-}"
             SIGN_IDENTITY="$2"
             shift 2
             ;;
         --team-id)
+            require_option_value "$1" "${2-}"
             TEAM_ID="$2"
             shift 2
             ;;
         --notary-profile)
+            require_option_value "$1" "${2-}"
             NOTARY_PROFILE="$2"
             shift 2
             ;;

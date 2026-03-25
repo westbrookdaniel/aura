@@ -69,6 +69,23 @@ enum AudioDeviceManager {
         return availableDevices.first?.id
     }
 
+    static func resolvedInputDeviceID(
+        selectedDeviceID: UInt32?,
+        usesSystemDefault: Bool,
+        from devices: [MicrophoneDevice]? = nil
+    ) -> AudioDeviceID? {
+        guard usesSystemDefault == false else { return nil }
+
+        let availableDevices = devices ?? availableInputDevices()
+
+        if let selectedDeviceID,
+           availableDevices.contains(where: { $0.stableID == selectedDeviceID }) {
+            return AudioDeviceID(selectedDeviceID)
+        }
+
+        return preferredBuiltInInputDeviceID(from: availableDevices)
+    }
+
     private static func systemDeviceIDs() -> [AudioDeviceID] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,

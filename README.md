@@ -47,3 +47,37 @@ Release setup:
 - publish each archive into `docs/` and regenerate `appcast.xml` with `./scripts/publish-appcast.sh --version <version>`
 
 `docs/README.md` includes the GitHub Pages publishing flow.
+
+## Sparkle Key Troubleshooting
+
+`AURA_SPARKLE_PUBLIC_ED_KEY` is Sparkle's public EdDSA update-verification key.
+Aura embeds this public key into the app's `Info.plist` as `SUPublicEDKey`, and Sparkle uses it to verify that downloaded updates were signed by your private key.
+
+The split is:
+
+- Apple code signing and notarization prove the app is trusted by macOS
+- Sparkle's EdDSA keypair proves updates came from you
+
+Generate the Sparkle keypair once:
+
+```bash
+./.build/artifacts/sparkle/Sparkle/bin/generate_keys
+```
+
+That command will:
+
+- store the private key in your login Keychain
+- print the public key you should use for `AURA_SPARKLE_PUBLIC_ED_KEY`
+
+Build releases with the printed public key:
+
+```bash
+export AURA_SPARKLE_PUBLIC_ED_KEY='PASTE_PUBLIC_KEY_HERE'
+./scripts/build-app.sh --version 0.1.0
+```
+
+Important:
+
+- the public key is safe to embed in the app
+- the private key must stay secret and should never be committed
+- if `AURA_SPARKLE_PUBLIC_ED_KEY` is missing, Aura will build, but automatic updates will be unavailable in the packaged app

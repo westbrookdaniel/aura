@@ -86,6 +86,10 @@ final class AppPreferencesStore: ObservableObject {
         }
     }
 
+    @Published var usesSystemDefaultMicrophone: Bool {
+        didSet { defaults.set(usesSystemDefaultMicrophone, forKey: Keys.usesSystemDefaultMicrophone) }
+    }
+
     @Published var voiceTextHistory: [VoiceTextHistoryItem] {
         didSet { save(voiceTextHistory, key: Keys.voiceTextHistory) }
     }
@@ -115,6 +119,7 @@ final class AppPreferencesStore: ObservableObject {
         static let shortcut = "shortcut"
         static let modelPath = "modelPath"
         static let selectedMicrophoneID = "selectedMicrophoneID"
+        static let usesSystemDefaultMicrophone = "usesSystemDefaultMicrophone"
         static let voiceTextHistory = "voiceTextHistory"
         static let auraColor = "auraColor"
         static let appearance = "appearance"
@@ -137,6 +142,11 @@ final class AppPreferencesStore: ObservableObject {
             selectedMicrophoneID = UInt32(defaults.integer(forKey: Keys.selectedMicrophoneID))
         } else {
             selectedMicrophoneID = nil
+        }
+        if defaults.object(forKey: Keys.usesSystemDefaultMicrophone) != nil {
+            usesSystemDefaultMicrophone = defaults.bool(forKey: Keys.usesSystemDefaultMicrophone)
+        } else {
+            usesSystemDefaultMicrophone = false
         }
         voiceTextHistory = Self.decode(Keys.voiceTextHistory) ?? []
         auraColor = Self.decode(Keys.auraColor) ?? .aqua

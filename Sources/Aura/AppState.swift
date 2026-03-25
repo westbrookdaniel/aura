@@ -127,8 +127,18 @@ final class AppState: ObservableObject {
     }
 
     func updateSelectedMicrophoneID(_ id: UInt32?) {
+        preferences.usesSystemDefaultMicrophone = (id == nil)
         preferences.selectedMicrophoneID = id
         refreshMicrophones()
+    }
+
+    var effectiveSelectedMicrophoneID: UInt32? {
+        let devices = availableMicrophones.isEmpty ? nil : availableMicrophones
+        return AudioDeviceManager.resolvedInputDeviceID(
+            selectedDeviceID: preferences.selectedMicrophoneID,
+            usesSystemDefault: preferences.usesSystemDefaultMicrophone,
+            from: devices
+        )
     }
 
     func setLaunchAtLogin(enabled: Bool) {
@@ -406,7 +416,7 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let fileURL = try audioRecorder.startRecording(preferredDeviceID: preferences.selectedMicrophoneID)
+            let fileURL = try audioRecorder.startRecording(preferredDeviceID: effectiveSelectedMicrophoneID)
             activeRecordingSessionID = UUID()
             activeRecordingURL = fileURL
             recordingStartedAt = Date()

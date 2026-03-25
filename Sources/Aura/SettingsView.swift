@@ -435,7 +435,7 @@ private struct SettingsDetailView: View {
 
     private var microphoneSelectionBinding: Binding<UInt32?> {
         Binding(
-            get: { appState.preferences.selectedMicrophoneID },
+            get: { appState.effectiveSelectedMicrophoneID },
             set: { appState.updateSelectedMicrophoneID($0) }
         )
     }
@@ -501,13 +501,13 @@ private struct UpdateSettingsCard: View {
 
     var body: some View {
         SettingsCard(theme: theme) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Automatic Updates")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
 
-                        Text(descriptionText)
+                        Text(updater.currentVersionDisplay)
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -549,14 +549,6 @@ private struct UpdateSettingsCard: View {
                 }
             }
         }
-    }
-
-    private var descriptionText: String {
-        if updater.isAvailable {
-            return "Aura can keep itself up to date with Sparkle and quietly install new signed releases."
-        }
-
-        return updater.unavailableReason ?? "Automatic updates are unavailable in this build."
     }
 }
 
