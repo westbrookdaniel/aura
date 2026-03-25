@@ -31,4 +31,19 @@ swift run
 Output:
 
 - `dist/Aura.app`
-- `dist/Aura.zip`
+- `dist/Aura-<version>.zip`
+
+## Automatic Updates
+
+Aura ships with Sparkle integration in the packaged app:
+
+- `Check for Updates...` is available from the menu bar menu
+- Settings includes automatic check and automatic install toggles
+
+Release setup:
+
+- build signed releases with `AURA_SPARKLE_PUBLIC_ED_KEY` set
+- by default, the Sparkle feed URL points at `https://westbrookdaniel.github.io/aura/appcast.xml`
+- publish each archive into `docs/` and regenerate `appcast.xml` with `./scripts/publish-appcast.sh --version <version>`
+
+`docs/README.md` includes the GitHub Pages publishing flow.

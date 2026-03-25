@@ -26,9 +26,83 @@ SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
 TEAM_ID="${AURA_TEAM_ID:-}"
 NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
 APP_ICON_PATH="${AURA_APP_ICON:-${DEFAULT_APP_ICON_PATH}}"
+SPARKLE_FEED_URL="${AURA_SPARKLE_FEED_URL:-https://westbrookdaniel.github.io/aura/appcast.xml}"
+SPARKLE_PUBLIC_ED_KEY="${AURA_SPARKLE_PUBLIC_ED_KEY:-}"
+SPARKLE_ENABLE_AUTOMATIC_CHECKS="${AURA_SPARKLE_ENABLE_AUTOMATIC_CHECKS:-YES}"
+SPARKLE_ALLOW_AUTOMATIC_UPDATES="${AURA_SPARKLE_ALLOW_AUTOMATIC_UPDATES:-YES}"
+SPARKLE_AUTOMATICALLY_UPDATE="${AURA_SPARKLE_AUTOMATICALLY_UPDATE:-YES}"
+SPARKLE_SCHEDULED_CHECK_INTERVAL="${AURA_SPARKLE_SCHEDULED_CHECK_INTERVAL:-86400}"
 
 ARCHIVE=1
 NOTARIZE=0
+
+plist_bool() {
+    local normalized
+    normalized="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+
+    case "${normalized}" in
+        YES|TRUE|1)
+            printf '<true/>'
+            ;;
+        NO|FALSE|0)
+            printf '<false/>'
+            ;;
+        *)
+            echo "Expected YES/NO style boolean but received '$1'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+find_framework_named() {
+    local framework_name="$1"
+    shift
+
+    local search_root
+    local candidate
+
+    for search_root in "$@"; do
+        [[ -d "${search_root}" ]] || continue
+        candidate="$(find "${search_root}" -path "*/${framework_name}.framework" -type d -print -quit 2>/dev/null || true)"
+        if [[ -n "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+embed_linked_frameworks() {
+    local binary_path="$1"
+    local destination_dir="$2"
+    local framework_name
+    local framework_source
+    local search_roots=(
+        "${SCRATCH_DIR}"
+        "$(dirname "${binary_path}")"
+        "${ROOT_DIR}/.build"
+        "${ROOT_DIR}/.build/checkouts"
+        "${ROOT_DIR}/.build/artifacts"
+    )
+
+    while IFS= read -r framework_name; do
+        [[ -n "${framework_name}" ]] || continue
+
+        framework_source="$(find_framework_named "${framework_name}" "${search_roots[@]}")" || true
+        if [[ -z "${framework_source:-}" ]]; then
+            echo "${framework_name}.framework was linked into ${APP_NAME} but could not be found in the build products." >&2
+            exit 1
+        fi
+
+        echo "Embedding ${framework_name}.framework..."
+        ditto "${framework_source}" "${destination_dir}/${framework_name}.framework"
+    done < <(
+        otool -L "${binary_path}" |
+            sed -n 's|^[[:space:]]*@rpath/\([^/]*\)\.framework/.*|\1|p' |
+            sort -u
+    )
+}
 
 usage() {
     cat <<EOF
@@ -58,12 +132,19 @@ Environment variables:
   AURA_TEAM_ID
   AURA_NOTARY_PROFILE
   AURA_APP_ICON
+  AURA_SPARKLE_FEED_URL
+  AURA_SPARKLE_PUBLIC_ED_KEY
+  AURA_SPARKLE_ENABLE_AUTOMATIC_CHECKS
+  AURA_SPARKLE_ALLOW_AUTOMATIC_UPDATES
+  AURA_SPARKLE_AUTOMATICALLY_UPDATE
+  AURA_SPARKLE_SCHEDULED_CHECK_INTERVAL
 
 Defaults:
   bundle id: ${BUNDLE_ID}
   developer: ${DEVELOPER_NAME}
   apple id: ${APPLE_ID_DEFAULT}
   notary profile: ${NOTARY_PROFILE}
+  sparkle feed: ${SPARKLE_FEED_URL}
 EOF
 }
 
@@ -119,6 +200,12 @@ if [[ -z "${SHORT_VERSION}" ]]; then
     SHORT_VERSION="${VERSION}"
 fi
 
+ARCHIVE_FILENAME="${APP_NAME}-${VERSION}.zip"
+ARCHIVE_PATH="${DIST_DIR}/${ARCHIVE_FILENAME}"
+SPARKLE_ENABLE_AUTOMATIC_CHECKS_PLIST="$(plist_bool "${SPARKLE_ENABLE_AUTOMATIC_CHECKS}")"
+SPARKLE_ALLOW_AUTOMATIC_UPDATES_PLIST="$(plist_bool "${SPARKLE_ALLOW_AUTOMATIC_UPDATES}")"
+SPARKLE_AUTOMATICALLY_UPDATE_PLIST="$(plist_bool "${SPARKLE_AUTOMATICALLY_UPDATE}")"
+
 if [[ -z "${SIGN_IDENTITY}" && -n "${TEAM_ID}" ]]; then
     SIGN_IDENTITY="Developer ID Application: ${DEVELOPER_NAME} (${TEAM_ID})"
 fi
@@ -134,7 +221,7 @@ if [[ "${NOTARIZE}" -eq 1 && -z "${SIGN_IDENTITY}" ]]; then
 fi
 
 mkdir -p "${DIST_DIR}" "${CLANG_CACHE_DIR}" "${SWIFTPM_CACHE_DIR}" "${ORG_SWIFTPM_CACHE_DIR}" "${TMP_DIR}"
-rm -rf "${APP_BUNDLE}" "${DIST_DIR}/${APP_NAME}.zip"
+rm -rf "${APP_BUNDLE}" "${ARCHIVE_PATH}"
 
 export TMPDIR="${TMP_DIR}"
 export TMP="${TMP_DIR}"
@@ -164,10 +251,12 @@ fi
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
+FRAMEWORKS_DIR="${CONTENTS_DIR}/Frameworks"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${FRAMEWORKS_DIR}"
 
 cp "${BIN_PATH}" "${MACOS_DIR}/${APP_NAME}"
 chmod 755 "${MACOS_DIR}/${APP_NAME}"
+embed_linked_frameworks "${BIN_PATH}" "${FRAMEWORKS_DIR}"
 
 INFO_TEMPLATE="${ROOT_DIR}/Packaging/Info.plist.template"
 INFO_PLIST="${CONTENTS_DIR}/Info.plist"
@@ -178,6 +267,12 @@ sed \
     -e "s|__SHORT_VERSION__|${SHORT_VERSION}|g" \
     -e "s|__MIN_SYSTEM_VERSION__|${MIN_SYSTEM_VERSION}|g" \
     -e "s|__MICROPHONE_USAGE__|${MICROPHONE_USAGE}|g" \
+    -e "s|__SPARKLE_FEED_URL__|${SPARKLE_FEED_URL}|g" \
+    -e "s|__SPARKLE_PUBLIC_ED_KEY__|${SPARKLE_PUBLIC_ED_KEY}|g" \
+    -e "s|__SPARKLE_ENABLE_AUTOMATIC_CHECKS__|${SPARKLE_ENABLE_AUTOMATIC_CHECKS_PLIST}|g" \
+    -e "s|__SPARKLE_ALLOW_AUTOMATIC_UPDATES__|${SPARKLE_ALLOW_AUTOMATIC_UPDATES_PLIST}|g" \
+    -e "s|__SPARKLE_AUTOMATICALLY_UPDATE__|${SPARKLE_AUTOMATICALLY_UPDATE_PLIST}|g" \
+    -e "s|__SPARKLE_SCHEDULED_CHECK_INTERVAL__|${SPARKLE_SCHEDULED_CHECK_INTERVAL}|g" \
     "${INFO_TEMPLATE}" > "${INFO_PLIST}"
 
 if [[ -f "${APP_ICON_PATH}" ]]; then
@@ -190,6 +285,10 @@ if [[ -f "${APP_ICON_PREVIEW_PATH}" ]]; then
     env "${SWIFT_BUILD_ENV[@]}" swift "${ROOT_DIR}/Packaging/ApplyBundleIcon.swift" "${APP_ICON_PREVIEW_PATH}" "${APP_BUNDLE}"
 fi
 
+if [[ -z "${SPARKLE_PUBLIC_ED_KEY}" ]]; then
+    echo "Warning: AURA_SPARKLE_PUBLIC_ED_KEY is not set, so automatic updates will be unavailable in this build." >&2
+fi
+
 if [[ -n "${SIGN_IDENTITY}" ]]; then
     echo "Signing ${APP_BUNDLE}..."
     codesign --force --deep --options runtime --sign "${SIGN_IDENTITY}" "${APP_BUNDLE}"
@@ -200,17 +299,17 @@ fi
 
 if [[ "${ARCHIVE}" -eq 1 ]]; then
     echo "Creating zip archive..."
-    ditto -c -k --keepParent "${APP_BUNDLE}" "${DIST_DIR}/${APP_NAME}.zip"
+    ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ARCHIVE_PATH}"
 fi
 
 if [[ "${NOTARIZE}" -eq 1 ]]; then
-    echo "Submitting ${APP_NAME}.zip for notarization..."
-    xcrun notarytool submit "${DIST_DIR}/${APP_NAME}.zip" --keychain-profile "${NOTARY_PROFILE}" --wait
+    echo "Submitting ${ARCHIVE_FILENAME} for notarization..."
+    xcrun notarytool submit "${ARCHIVE_PATH}" --keychain-profile "${NOTARY_PROFILE}" --wait
     echo "Stapling notarization ticket..."
     xcrun stapler staple "${APP_BUNDLE}"
     echo "Rebuilding zip archive with stapled app..."
-    rm -f "${DIST_DIR}/${APP_NAME}.zip"
-    ditto -c -k --keepParent "${APP_BUNDLE}" "${DIST_DIR}/${APP_NAME}.zip"
+    rm -f "${ARCHIVE_PATH}"
+    ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ARCHIVE_PATH}"
 fi
 
 echo
@@ -219,5 +318,5 @@ echo "  ${APP_BUNDLE}"
 
 if [[ "${ARCHIVE}" -eq 1 ]]; then
     echo "Archive ready at:"
-    echo "  ${DIST_DIR}/${APP_NAME}.zip"
+    echo "  ${ARCHIVE_PATH}"
 fi

@@ -402,6 +402,11 @@ private struct SettingsDetailView: View {
                     }
                 }
 
+                UpdateSettingsCard(
+                    updater: appState.updater,
+                    theme: theme
+                )
+
                 HStack {
                     Spacer()
 
@@ -488,6 +493,71 @@ private struct SettingsDetailView: View {
         )
     }
 
+}
+
+private struct UpdateSettingsCard: View {
+    @ObservedObject var updater: AppUpdater
+    let theme: AuraTheme
+
+    var body: some View {
+        SettingsCard(theme: theme) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Automatic Updates")
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+
+                        Text(descriptionText)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    if updater.isAvailable {
+                        Button("Check Now", action: updater.checkForUpdates)
+                            .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
+                            .disabled(updater.canCheckForUpdates == false)
+                    }
+                }
+
+                if updater.isAvailable {
+                    Toggle(
+                        "Automatically check for updates",
+                        isOn: Binding(
+                            get: { updater.automaticallyChecksForUpdates },
+                            set: { updater.setAutomaticallyChecksForUpdates($0) }
+                        )
+                    )
+
+                    Toggle(
+                        "Automatically download and install updates",
+                        isOn: Binding(
+                            get: { updater.automaticallyDownloadsUpdates },
+                            set: { updater.setAutomaticallyDownloadsUpdates($0) }
+                        )
+                    )
+                    .disabled(updater.automaticallyChecksForUpdates == false || updater.allowsAutomaticUpdates == false)
+
+                    if updater.allowsAutomaticUpdates == false {
+                        Text("This build is configured to offer updates manually after they are found.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private var descriptionText: String {
+        if updater.isAvailable {
+            return "Aura can keep itself up to date with Sparkle and quietly install new signed releases."
+        }
+
+        return updater.unavailableReason ?? "Automatic updates are unavailable in this build."
+    }
 }
 
 struct VoiceResponseHistoryHomeCard: View {

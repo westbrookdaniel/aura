@@ -30,5 +30,17 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>__MICROPHONE_USAGE__</string>
+    <key>SUAllowsAutomaticUpdates</key>
+    __SPARKLE_ALLOW_AUTOMATIC_UPDATES__
+    <key>SUAutomaticallyUpdate</key>
+    __SPARKLE_AUTOMATICALLY_UPDATE__
+    <key>SUEnableAutomaticChecks</key>
+    __SPARKLE_ENABLE_AUTOMATIC_CHECKS__
+    <key>SUFeedURL</key>
+    <string>__SPARKLE_FEED_URL__</string>
+    <key>SUPublicEDKey</key>
+    <string>__SPARKLE_PUBLIC_ED_KEY__</string>
+    <key>SUScheduledCheckInterval</key>
+    <integer>__SPARKLE_SCHEDULED_CHECK_INTERVAL__</integer>
 </dict>
 </plist>

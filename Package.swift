@@ -12,6 +12,9 @@ let package = Package(
             targets: ["Aura"]
         )
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.8.1")
+    ],
     targets: [
         .binaryTarget(
             name: "WhisperFramework",
@@ -20,8 +23,17 @@ let package = Package(
         ),
         .executableTarget(
             name: "Aura",
-            dependencies: ["WhisperFramework"],
-            path: "Sources/Aura"
+            dependencies: [
+                "WhisperFramework",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
+            path: "Sources/Aura",
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "@executable_path/../Frameworks"
+                ])
+            ]
         ),
         .testTarget(
             name: "AuraTests",
