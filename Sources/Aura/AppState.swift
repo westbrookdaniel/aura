@@ -32,6 +32,7 @@ extension OrbAppearanceOption {
 final class AppState: ObservableObject {
     @Published var sessionState: RecordingSessionState = .idle
     @Published var permissionState: PermissionState = .unknown
+    @Published var whisperModelSetupState: WhisperModelSetupState = .checking
     @Published var waveformSamples: [CGFloat] = Array(repeating: 0, count: 24)
     @Published var lastErrorMessage: String?
     @Published var lastTranscript: String = ""
@@ -52,6 +53,7 @@ final class AppState: ObservableObject {
     private var activeRecordingURL: URL?
     private var recordingStartedAt: Date?
     private var transcriptionTask: Task<Void, Never>?
+    private var modelPreparationTask: Task<Void, Never>?
     private var activeRecordingSessionID = UUID()
 
     init(
@@ -77,9 +79,7 @@ final class AppState: ObservableObject {
     func start() {
         refreshPermissions()
         refreshMicrophones()
-        Task { [weak self] in
-            await self?.synchronizeWhisperModelLocation()
-        }
+        ensureWhisperModelReady()
         isLaunchAtLoginEnabled = LaunchAtLoginController.shared.isEnabled
         overlayController.updateAuraColor(preferences.auraColor)
         applyAppearance(preferences.appearance)
@@ -104,6 +104,7 @@ final class AppState: ObservableObject {
         _ = try? audioRecorder.stop()
         overlayController.hideAll()
         transcriptionTask?.cancel()
+        modelPreparationTask?.cancel()
     }
 
     func updateShortcut(_ shortcut: ShortcutSpec) {
@@ -174,17 +175,25 @@ final class AppState: ObservableObject {
     func openSettingsWindow() {
         refreshPermissions()
         refreshMicrophones()
+        ensureWhisperModelReady()
         SettingsWindowController.shared.show(appState: self)
     }
 
     func presentSetupOverlay() {
         refreshPermissions()
         refreshMicrophones()
+        ensureWhisperModelReady()
         isSetupOverlayPresented = true
     }
 
     func dismissSetupOverlay() {
         isSetupOverlayPresented = false
+    }
+
+    func retryWhisperModelDownload() {
+        guard modelPreparationTask == nil else { return }
+        whisperModelSetupState = .checking
+        ensureWhisperModelReady(allowRetryAfterFailure: true)
     }
 
     func clearVoiceTextHistory() {
@@ -278,16 +287,97 @@ final class AppState: ObservableObject {
         permissionState = permissionsManager.currentState()
     }
 
-    private func synchronizeWhisperModelLocation() async {
+    private func ensureWhisperModelReady(allowRetryAfterFailure: Bool = false) {
+        if let installedPath = installedWhisperModelPath() {
+            preferences.modelPath = installedPath
+            whisperModelSetupState = .installed(path: installedPath)
+            return
+        }
+
+        if case .failed = whisperModelSetupState, allowRetryAfterFailure == false {
+            return
+        }
+
+        guard modelPreparationTask == nil else { return }
+
+        whisperModelSetupState = .checking
+
+        let relay = WhisperModelSetupRelay(
+            onPreparationStage: { [weak self] stage in
+                self?.whisperModelSetupState = .preparing(stage: stage)
+            },
+            onDownloadProgress: { [weak self] progress in
+                self?.updateWhisperModelDownloadProgress(progress)
+            }
+        )
+
+        modelPreparationTask = Task { [weak self] in
+            guard let self else { return }
+            await self.prepareWhisperModel(relay: relay)
+        }
+    }
+
+    private func prepareWhisperModel(relay: WhisperModelSetupRelay) async {
+        defer { modelPreparationTask = nil }
+
         do {
             let synchronizedPath = try await Task.detached(priority: .utility) {
-                try WhisperInstallService.synchronizeModelLocationIfNeeded()
+                try WhisperInstallService.synchronizeModelLocationIfNeeded(
+                    onStageChange: { stage in
+                        relay.reportPreparationStage(stage)
+                    }
+                )
             }.value
 
             if let synchronizedPath {
                 preferences.modelPath = synchronizedPath
+                whisperModelSetupState = .installed(path: synchronizedPath)
+                return
             }
-        } catch {}
+
+            whisperModelSetupState = .downloading(progress: 0, stage: Self.whisperModelDownloadStage)
+
+            let downloadedPath = try await Task.detached(priority: .utility) {
+                try await WhisperInstallService.downloadBaseModel(
+                    onProgress: { progress in
+                        relay.reportDownloadProgress(progress)
+                    }
+                )
+            }.value
+
+            preferences.modelPath = downloadedPath
+            whisperModelSetupState = .installed(path: downloadedPath)
+        } catch is CancellationError {
+            if let installedPath = installedWhisperModelPath() {
+                preferences.modelPath = installedPath
+                whisperModelSetupState = .installed(path: installedPath)
+            }
+        } catch {
+            whisperModelSetupState = .failed(message: error.localizedDescription)
+        }
+    }
+
+    private func installedWhisperModelPath() -> String? {
+        let preferredPath = NSString(string: preferences.modelPath).expandingTildeInPath
+        if WhisperInstallService.isBaseModelInstalled(at: preferredPath) {
+            return preferredPath
+        }
+
+        let expectedPath = WhisperInstallService.expectedModelPath()
+        if preferredPath != expectedPath,
+           WhisperInstallService.isBaseModelInstalled(at: expectedPath) {
+            return expectedPath
+        }
+
+        return nil
+    }
+
+    private func updateWhisperModelDownloadProgress(_ progress: Double) {
+        let clampedProgress = min(max(progress, 0), 1)
+        whisperModelSetupState = .downloading(
+            progress: clampedProgress,
+            stage: Self.whisperModelDownloadStage
+        )
     }
 
     private func beginRecording() {
@@ -301,6 +391,11 @@ final class AppState: ObservableObject {
         lastErrorMessage = nil
         overlayController.hideAlert()
         refreshPermissions()
+
+        guard hasCompletedSetup else {
+            openSettingsWindow()
+            return
+        }
 
         guard permissionState.microphone != .denied else {
             reportError("Microphone access is required before dictation can start.")
@@ -464,13 +559,27 @@ final class AppState: ObservableObject {
             && permissionState.accessibility == .granted
     }
 
+    var isWhisperModelReady: Bool {
+        whisperModelSetupState.isInstalled || installedWhisperModelPath() != nil
+    }
+
+    var hasCompletedSetup: Bool {
+        hasRequiredPermissions && isWhisperModelReady
+    }
+
     var requiresPermissionSetup: Bool {
         hasRequiredPermissions == false
     }
 
-    var shouldShowSetupOverlay: Bool {
-        requiresPermissionSetup || isSetupOverlayPresented
+    var requiresSetup: Bool {
+        hasCompletedSetup == false
     }
+
+    var shouldShowSetupOverlay: Bool {
+        requiresSetup || isSetupOverlayPresented
+    }
+
+    private static let whisperModelDownloadStage = "Downloading Model (1.5 GB)"
 }
 
 enum DictationError: LocalizedError {
@@ -480,6 +589,31 @@ enum DictationError: LocalizedError {
         switch self {
         case .insertionFailed(let message):
             return message
+        }
+    }
+}
+
+private final class WhisperModelSetupRelay: @unchecked Sendable {
+    private let onPreparationStage: @MainActor (String) -> Void
+    private let onDownloadProgress: @MainActor (Double) -> Void
+
+    init(
+        onPreparationStage: @escaping @MainActor (String) -> Void,
+        onDownloadProgress: @escaping @MainActor (Double) -> Void
+    ) {
+        self.onPreparationStage = onPreparationStage
+        self.onDownloadProgress = onDownloadProgress
+    }
+
+    func reportPreparationStage(_ stage: String) {
+        Task { @MainActor in
+            onPreparationStage(stage)
+        }
+    }
+
+    func reportDownloadProgress(_ progress: Double) {
+        Task { @MainActor in
+            onDownloadProgress(progress)
         }
     }
 }

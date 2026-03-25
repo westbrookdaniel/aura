@@ -11,8 +11,13 @@ enum WhisperInstallService {
             return synchronizedPath
         }
 
-        onStageChange("Downloading Medium English...")
+        onStageChange("Downloading Model (1.5 GB)")
+        return try await downloadBaseModel(onProgress: onProgress)
+    }
 
+    static func downloadBaseModel(
+        onProgress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> String {
         let destination = try modelDestinationURL()
         let parent = destination.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
@@ -43,12 +48,6 @@ enum WhisperInstallService {
             return destination.path
         }
 
-        if let bundledModelURL, FileManager.default.fileExists(atPath: bundledModelURL.path) {
-            onStageChange("Installing bundled model...")
-            try copyItemReplacingDestination(from: bundledModelURL, to: destination)
-            return destination.path
-        }
-
         return nil
     }
 
@@ -58,10 +57,6 @@ enum WhisperInstallService {
 
     static func isBaseModelInstalled(at path: String) -> Bool {
         FileManager.default.fileExists(atPath: NSString(string: path).expandingTildeInPath)
-    }
-
-    private static var bundledModelURL: URL? {
-        Bundle.main.url(forResource: mediumEnglishFilename, withExtension: nil, subdirectory: "Models")
     }
 
     private static func modelDestinationURL() throws -> URL {
@@ -102,14 +97,6 @@ enum WhisperInstallService {
             try FileManager.default.copyItem(at: source, to: destination)
             try? FileManager.default.removeItem(at: source)
         }
-    }
-
-    private static func copyItemReplacingDestination(from source: URL, to destination: URL) throws {
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-
-        try FileManager.default.copyItem(at: source, to: destination)
     }
 
     private static func downloadFile(from url: URL, onProgress: @escaping @Sendable (Double) -> Void) async throws -> URL {

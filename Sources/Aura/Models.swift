@@ -42,6 +42,22 @@ struct PermissionState: Equatable {
     )
 }
 
+enum WhisperModelSetupState: Equatable {
+    case checking
+    case preparing(stage: String)
+    case downloading(progress: Double, stage: String)
+    case installed(path: String)
+    case failed(message: String)
+
+    var isInstalled: Bool {
+        if case .installed = self {
+            return true
+        }
+
+        return false
+    }
+}
+
 struct ShortcutSpec: Equatable, Codable {
     enum TriggerKey: String, CaseIterable, Codable, Identifiable {
         case fn

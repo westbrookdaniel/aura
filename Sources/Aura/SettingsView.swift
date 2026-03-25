@@ -94,7 +94,7 @@ struct SettingsView: View {
                 SetupFlowOverlay(
                     appState: appState,
                     theme: theme,
-                    canDismiss: appState.hasRequiredPermissions,
+                    canDismiss: appState.hasCompletedSetup,
                     onDismiss: { appState.dismissSetupOverlay() }
                 )
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -105,10 +105,10 @@ struct SettingsView: View {
         .preferredColorScheme(preferredColorScheme)
         .animation(.easeInOut(duration: 0.22), value: setupOverlayIsVisible)
         .onAppear {
-            selectedDestination = appState.requiresPermissionSetup ? .settings : .history
+            selectedDestination = appState.requiresSetup ? .settings : .history
         }
-        .onChange(of: appState.requiresPermissionSetup) { requiresPermissionSetup in
-            if requiresPermissionSetup {
+        .onChange(of: appState.requiresSetup) { requiresSetup in
+            if requiresSetup {
                 selectedDestination = .settings
             }
         }
@@ -980,10 +980,15 @@ struct SetupFlowCard: View {
     var body: some View {
         SettingsCard(theme: theme, contentPadding: 24) {
             VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Lets get you setup")
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Let's get you set up")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
-                }
+
+                    Text("We needs permissions and some dependencies before we can start.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }.padding(.vertical, 10)
 
                 VStack(alignment: .leading, spacing: 14) {
                     SetupPermissionRow(
@@ -1009,12 +1014,18 @@ struct SetupFlowCard: View {
                         secondaryTitle: "Open System Settings",
                         theme: theme
                     )
+
+                    SetupModelDownloadSection(
+                        state: appState.whisperModelSetupState,
+                        retryAction: appState.retryWhisperModelDownload,
+                        theme: theme
+                    )
                 }
 
                 HStack(spacing: 8) {
                     Spacer()
                     if canDismiss {
-                        Button("Dismiss", action: onDismiss)
+                        Button("Continue", action: onDismiss)
                             .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
                     }
                 }
@@ -1196,6 +1207,184 @@ struct SetupPermissionRow: View {
                         .stroke(theme.historyRowBorder(for: colorScheme), lineWidth: 1)
                 )
         )
+    }
+}
+
+struct SetupModelDownloadSection: View {
+    let state: WhisperModelSetupState
+    let retryAction: () -> Void
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    switch state {
+                    case .checking:
+                        modelMessage("Checking for an existing model...")
+                    case .preparing(let stage):
+                        modelMessage(stage)
+                    case .downloading(_, let stage):
+                        modelMessage(stage)
+                    case .installed:
+                        modelMessage("Dependencies have been downloaded")
+                    case .failed(let message):
+                        VStack(alignment: .leading, spacing: 6) {
+                            modelErrorMessage(message)
+
+                            Button("Retry Download", action: retryAction)
+                                .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
+                        }
+                    }
+
+                    Spacer()
+
+                    SetupModelStatusBadge(state: state, theme: theme)
+                }
+
+                switch state {
+                case .checking:
+                    ProgressView(value: 0, total: 1)
+                        .tint(theme.accentStrong.color)
+                case .preparing:
+                    ProgressView(value: 0, total: 1)
+                        .tint(theme.accentStrong.color)
+                case .downloading(let progress, _):
+                    ProgressView(value: progress, total: 1)
+                        .tint(theme.accentStrong.color)
+                case .installed:
+                    ProgressView(value: 1, total: 1)
+                        .tint(theme.accentStrong.color)
+                case .failed:
+                    ProgressView(value: 0, total: 1)
+                        .tint(theme.accentStrong.color)
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(modelCardFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(modelCardBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    private func progressLabel(for progress: Double) -> String {
+        let percent = Int((min(max(progress, 0), 1) * 100).rounded())
+        return "Downloading \(percent)%"
+    }
+
+    private func modelMessage(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(messageColor)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func modelErrorMessage(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 12))
+            .foregroundStyle(theme.error.foreground.color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var modelCardFill: Color {
+        theme.historyRowFill(for: colorScheme)
+    }
+
+    private var modelCardBorder: Color {
+        theme.historyRowBorder(for: colorScheme)
+    }
+
+    private var messageColor: Color {
+        .primary
+    }
+}
+
+struct SetupModelStatusBadge: View {
+    let state: WhisperModelSetupState
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(backgroundColor)
+            )
+    }
+
+    private var title: String {
+        switch state {
+        case .checking:
+            return "Checking"
+        case .preparing:
+            return "Preparing"
+        case .downloading(let progress, _):
+            return downloadProgressLabel(for: progress)
+        case .installed:
+            return "Complete"
+        case .failed:
+            return "Error"
+        }
+    }
+
+    private var icon: String {
+        switch state {
+        case .checking:
+            return "clock"
+        case .preparing:
+            return "shippingbox"
+        case .downloading:
+            return "arrow.down"
+        case .installed:
+            return "checkmark"
+        case .failed:
+            return "exclamationmark"
+        }
+    }
+
+    private var palette: AuraTheme.StatusPalette {
+        switch state {
+        case .installed:
+            return theme.success
+        case .failed:
+            return theme.error
+        case .checking, .preparing, .downloading:
+            return theme.neutral
+        }
+    }
+
+    private var backgroundColor: Color {
+        if colorScheme == .dark {
+            return palette.foreground.color.opacity(0.18)
+        }
+
+        return palette.background.color
+    }
+
+    private var foregroundColor: Color {
+        if colorScheme == .dark {
+            return palette.background.color
+        }
+
+        return palette.foreground.color
+    }
+
+    private func downloadProgressLabel(for progress: Double) -> String {
+        let percent = Int((min(max(progress, 0), 1) * 100).rounded())
+        return "\(percent)%"
     }
 }
 

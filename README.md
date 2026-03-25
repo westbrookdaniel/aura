@@ -12,7 +12,7 @@ The app stores its working model in:
 
 - `~/Library/Caches/Aura/Models/ggml-medium.en.bin`
 
-If no bundled or migrated model is available, the app downloads:
+On first launch, Aura checks for an existing cached model and, if needed, downloads during setup with visible progress:
 
 - `ggml-medium.en.bin`
 
@@ -27,8 +27,6 @@ swift run
 ```bash
 ./scripts/build-app.sh
 ```
-
-If `ggml-medium.en.bin` already exists in `~/Library/Caches/Aura/Models` or `~/Library/Application Support/Aura`, the build script bundles it into the app automatically.
 
 Output:
 

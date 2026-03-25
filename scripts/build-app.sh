@@ -8,7 +8,7 @@ DEFAULT_NOTARY_PROFILE="aura-notary"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 APP_BUNDLE="${DIST_DIR}/${APP_NAME}.app"
-SCRATCH_DIR="${ROOT_DIR}/.build-release"
+SCRATCH_DIR="${ROOT_DIR}/.build"
 BUILD_CACHE_DIR="${ROOT_DIR}/.cache/release"
 CLANG_CACHE_DIR="${BUILD_CACHE_DIR}/clang"
 SWIFTPM_CACHE_DIR="${BUILD_CACHE_DIR}/swiftpm"
@@ -16,9 +16,6 @@ ORG_SWIFTPM_CACHE_DIR="${BUILD_CACHE_DIR}/org.swift.swiftpm"
 TMP_DIR="${BUILD_CACHE_DIR}/tmp"
 DEFAULT_APP_ICON_PATH="${ROOT_DIR}/Packaging/AppIcon.icns"
 APP_ICON_PREVIEW_PATH="${ROOT_DIR}/Packaging/AuraIconPreview.png"
-MODEL_FILENAME="ggml-medium.en.bin"
-DEFAULT_MODEL_CACHE_PATH="${HOME}/Library/Caches/Aura/Models/${MODEL_FILENAME}"
-LEGACY_MODEL_PATH="${HOME}/Library/Application Support/Aura/${MODEL_FILENAME}"
 
 BUNDLE_ID="${AURA_BUNDLE_ID:-com.westbrookdaniel.aura}"
 VERSION="${AURA_VERSION:-0.1.0}"
@@ -29,18 +26,9 @@ SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
 TEAM_ID="${AURA_TEAM_ID:-}"
 NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
 APP_ICON_PATH="${AURA_APP_ICON:-${DEFAULT_APP_ICON_PATH}}"
-MODEL_SOURCE_PATH="${AURA_MODEL_PATH:-}"
 
 ARCHIVE=1
 NOTARIZE=0
-
-if [[ -z "${MODEL_SOURCE_PATH}" ]]; then
-    if [[ -f "${DEFAULT_MODEL_CACHE_PATH}" ]]; then
-        MODEL_SOURCE_PATH="${DEFAULT_MODEL_CACHE_PATH}"
-    elif [[ -f "${LEGACY_MODEL_PATH}" ]]; then
-        MODEL_SOURCE_PATH="${LEGACY_MODEL_PATH}"
-    fi
-fi
 
 usage() {
     cat <<EOF
@@ -70,7 +58,6 @@ Environment variables:
   AURA_TEAM_ID
   AURA_NOTARY_PROFILE
   AURA_APP_ICON
-  AURA_MODEL_PATH
 
 Defaults:
   bundle id: ${BUNDLE_ID}
@@ -177,8 +164,7 @@ fi
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
-MODELS_DIR="${RESOURCES_DIR}/Models"
-mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${MODELS_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 cp "${BIN_PATH}" "${MACOS_DIR}/${APP_NAME}"
 chmod 755 "${MACOS_DIR}/${APP_NAME}"
@@ -202,13 +188,6 @@ fi
 
 if [[ -f "${APP_ICON_PREVIEW_PATH}" ]]; then
     env "${SWIFT_BUILD_ENV[@]}" swift "${ROOT_DIR}/Packaging/ApplyBundleIcon.swift" "${APP_ICON_PREVIEW_PATH}" "${APP_BUNDLE}"
-fi
-
-if [[ -n "${MODEL_SOURCE_PATH}" && -f "${MODEL_SOURCE_PATH}" ]]; then
-    echo "Bundling Whisper model from ${MODEL_SOURCE_PATH}..."
-    cp "${MODEL_SOURCE_PATH}" "${MODELS_DIR}/${MODEL_FILENAME}"
-else
-    echo "No local Whisper model found to bundle. Aura will migrate or download it on first run."
 fi
 
 if [[ -n "${SIGN_IDENTITY}" ]]; then
