@@ -18,7 +18,7 @@ DEFAULT_APP_ICON_PATH="${ROOT_DIR}/Packaging/AppIcon.icns"
 APP_ICON_PREVIEW_PATH="${ROOT_DIR}/Packaging/AuraIconPreview.png"
 
 BUNDLE_ID="${AURA_BUNDLE_ID:-com.westbrookdaniel.aura}"
-VERSION="${AURA_VERSION:-0.1.0}"
+VERSION="${AURA_VERSION:-0.1.1}"
 SHORT_VERSION="${AURA_SHORT_VERSION:-}"
 MIN_SYSTEM_VERSION="${AURA_MIN_SYSTEM_VERSION:-13.3}"
 MICROPHONE_USAGE="${AURA_MICROPHONE_USAGE:-Aura needs microphone access to capture dictation audio.}"
