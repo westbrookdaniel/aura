@@ -81,6 +81,7 @@ enum HistorySectionBuilder {
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedDestination: SettingsDestination = .settings
 
     var body: some View {
@@ -128,17 +129,36 @@ struct SettingsView: View {
         appState.preferences.auraColor.theme
     }
 
+    private var sidebarBackgroundColor: Color {
+        if colorScheme == .dark {
+            return Color.white.opacity(0.05)
+        }
+
+        return Color.black.opacity(0.035)
+    }
+
     private var setupOverlayIsVisible: Bool {
         appState.shouldShowSetupOverlay
     }
 
     private var settingsContent: some View {
         HStack(spacing: 0) {
-            SettingsSidebar(
-                selectedDestination: $selectedDestination,
-                theme: theme
-            )
+            ZStack(alignment: .trailing) {
+                sidebarBackgroundColor
+                    .ignoresSafeArea(edges: .top)
+
+                SettingsSidebar(
+                    selectedDestination: $selectedDestination,
+                    theme: theme
+                )
+
+                Rectangle()
+                    .fill(theme.divider(for: colorScheme))
+                    .frame(width: 1)
+                    .ignoresSafeArea(edges: .top)
+            }
             .frame(width: 228)
+            .frame(maxHeight: .infinity)
 
             Group {
                 switch selectedDestination {
@@ -158,8 +178,6 @@ struct SettingsView: View {
 private struct SettingsSidebar: View {
     @Binding var selectedDestination: SettingsDestination
     let theme: AuraTheme
-
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -181,17 +199,7 @@ private struct SettingsSidebar: View {
         .padding(.top, 18)
         .padding(.bottom, 18)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(sidebarBackground)
     }
-
-    private var sidebarBackground: Color {
-        if colorScheme == .dark {
-            return Color.white.opacity(0.05)
-        }
-
-        return Color.black.opacity(0.035)
-    }
-
 }
 
 private struct SidebarDestinationButton: View {
