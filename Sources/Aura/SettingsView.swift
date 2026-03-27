@@ -129,14 +129,6 @@ struct SettingsView: View {
         appState.preferences.auraColor.theme
     }
 
-    private var sidebarBackgroundColor: Color {
-        if colorScheme == .dark {
-            return Color.white.opacity(0.05)
-        }
-
-        return Color.black.opacity(0.035)
-    }
-
     private var setupOverlayIsVisible: Bool {
         appState.shouldShowSetupOverlay
     }
@@ -144,7 +136,7 @@ struct SettingsView: View {
     private var settingsContent: some View {
         HStack(spacing: 0) {
             ZStack(alignment: .trailing) {
-                sidebarBackgroundColor
+                sidebarBackground
                     .ignoresSafeArea(edges: .top)
 
                 SettingsSidebar(
@@ -171,6 +163,38 @@ struct SettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(detailBackground.ignoresSafeArea())
+        }
+    }
+
+    private var sidebarBackground: some View {
+        ZStack {
+            Color(nsColor: .underPageBackgroundColor)
+
+            LinearGradient(
+                colors: [
+                    theme.accentSoft.color.opacity(colorScheme == .dark ? 0.09 : 0.18),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    private var detailBackground: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+
+            RadialGradient(
+                colors: [
+                    theme.accentSoft.color.opacity(colorScheme == .dark ? 0.07 : 0.16),
+                    Color.clear
+                ],
+                center: .topTrailing,
+                startRadius: 12,
+                endRadius: 420
+            )
         }
     }
 }
@@ -180,8 +204,15 @@ private struct SettingsSidebar: View {
     let theme: AuraTheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsSidebarHeader(theme: theme)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Pages")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
                 ForEach(SettingsDestination.allCases) { destination in
                     SidebarDestinationButton(
                         destination: destination,
@@ -195,10 +226,53 @@ private struct SettingsSidebar: View {
 
             Spacer()
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 18)
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
         .padding(.bottom, 18)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct SettingsSidebarHeader: View {
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            theme.accentStrong.color,
+                            theme.accentMuted.color
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 42, height: 42)
+                .overlay {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.96))
+                }
+                .shadow(
+                    color: theme.shadow.color.opacity(colorScheme == .dark ? 0.18 : 0.10),
+                    radius: 10,
+                    x: 0,
+                    y: 5
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Aura")
+                    .font(.system(size: 15, weight: .semibold))
+
+                Text("Menu bar dictation")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -213,30 +287,43 @@ private struct SidebarDestinationButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: destination.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 20)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(iconBackground)
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        Image(systemName: destination.icon)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(destination.title)
                         .font(.system(size: 14, weight: .semibold))
+
+                    Text(destination.subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
             }
             .foregroundStyle(isSelected ? selectedTextColor : defaultTextColor)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(background)
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 
     private var background: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(activeBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(activeBorder, lineWidth: 1)
+            )
     }
 
     private var selectedTextColor: Color {
@@ -250,11 +337,20 @@ private struct SidebarDestinationButton: View {
     private var activeBackground: Color {
         guard isSelected else { return .clear }
 
-        if colorScheme == .dark {
-            return Color.white.opacity(0.11)
+        return theme.accentStrong.color.opacity(colorScheme == .dark ? 0.18 : 0.10)
+    }
+
+    private var activeBorder: Color {
+        guard isSelected else { return .clear }
+        return theme.accentBorder.color.opacity(colorScheme == .dark ? 0.34 : 0.42)
+    }
+
+    private var iconBackground: Color {
+        if isSelected {
+            return theme.accentStrong.color.opacity(colorScheme == .dark ? 0.30 : 0.14)
         }
 
-        return Color.black.opacity(0.09)
+        return colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.045)
     }
 }
 
@@ -262,52 +358,44 @@ private struct SettingsHomeView: View {
     @EnvironmentObject private var appState: AppState
 
     let theme: AuraTheme
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                SettingsPageHeader(
+                    title: "History",
+                    subtitle: "Review recent dictation output and manage saved transcripts.",
+                    detail: historySummary
+                ) {
+                    if appState.preferences.voiceTextHistory.isEmpty == false {
+                        Button(action: appState.clearVoiceTextHistory) {
+                            Label("Clear History", systemImage: "trash")
+                        }
+                        .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
+                    }
+                }
+
                 VoiceResponseHistoryHomeCard(
                     items: appState.preferences.voiceTextHistory,
                     theme: theme,
                     onDelete: { appState.removeVoiceTextHistoryItem(id: $0.id) }
                 )
-
-                HStack {
-                    Spacer()
-
-                    Button(action: appState.clearVoiceTextHistory) {
-                        Label("Clear History", systemImage: "trash")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
-                }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 8)
-        }
-        .background(alignment: .topLeading) {
-            historyBackground
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
     }
 
-    private var historyBackground: some View {
-        RadialGradient(
-            colors: [
-                theme.accentStrong.color.opacity(colorScheme == .dark ? 0.20 : 0.16),
-                theme.accentStrong.color.opacity(colorScheme == .dark ? 0.08 : 0.05),
-                Color.clear
-            ],
-            center: .topLeading,
-            startRadius: 0,
-            endRadius: 460
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
+    private var historySummary: String {
+        let count = appState.preferences.voiceTextHistory.count
+        switch count {
+        case 0:
+            return "No saved transcripts"
+        case 1:
+            return "1 saved transcript"
+        default:
+            return "\(count) saved transcripts"
+        }
     }
 }
 
@@ -320,6 +408,12 @@ private struct SettingsDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                SettingsPageHeader(
+                    title: "Settings",
+                    subtitle: "Adjust how Aura listens, looks, and behaves.",
+                    detail: currentAppVersionDisplay()
+                )
+
                 if let error = appState.lastErrorMessage, !error.isEmpty {
                     SettingsWarningCard(
                         title: "Warning",
@@ -329,22 +423,34 @@ private struct SettingsDetailView: View {
                     )
                 }
 
-                SettingsCard(theme: theme) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Picker("Shortcut", selection: presetShortcutBinding) {
-                                ForEach(ShortcutPreset.allCases) { preset in
-                                    Text(preset.label).tag(preset)
-                                }
+                SettingsSectionCard(
+                    theme: theme,
+                    systemImage: "keyboard",
+                    title: "Shortcut",
+                    description: "Choose how you trigger Aura before it starts listening."
+                ) {
+                    SettingsControlRow(
+                        title: "Trigger",
+                        description: "Pick the key you press and hold to start dictation."
+                    ) {
+                        Picker("Shortcut", selection: presetShortcutBinding) {
+                            ForEach(ShortcutPreset.allCases) { preset in
+                                Text(preset.label).tag(preset)
                             }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
 
-                            if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
-                                HStack {
-                                    Text("Current")
-                                    Spacer()
-                                    Text(appState.preferences.shortcut.displayName)
-                                        .foregroundStyle(.secondary)
-                                }
+                    if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
+                        SettingsRowDivider()
+
+                        SettingsControlRow(
+                            title: "Custom Shortcut",
+                            description: "Press Escape while recording if you want to cancel the capture."
+                        ) {
+                            VStack(alignment: .trailing, spacing: 10) {
+                                SettingsValueBadge(text: appState.preferences.shortcut.displayName)
 
                                 ShortcutCaptureButton(
                                     isCapturing: $isCapturingShortcut,
@@ -359,8 +465,16 @@ private struct SettingsDetailView: View {
                     }
                 }
 
-                SettingsCard(theme: theme) {
-                    VStack(alignment: .leading, spacing: 12) {
+                SettingsSectionCard(
+                    theme: theme,
+                    systemImage: "mic",
+                    title: "Audio Input",
+                    description: "Select which microphone Aura should use when recording."
+                ) {
+                    SettingsControlRow(
+                        title: "Microphone",
+                        description: "System Default follows the input device currently chosen in macOS."
+                    ) {
                         Picker("Microphone", selection: microphoneSelectionBinding) {
                             Text(systemDefaultMicrophoneLabel).tag(Optional<UInt32>.none)
 
@@ -368,57 +482,86 @@ private struct SettingsDetailView: View {
                                 Text(microphone.displayName).tag(Optional(microphone.stableID))
                             }
                         }
+                        .labelsHidden()
+                        .frame(width: 260)
                     }
                 }
 
-                SettingsCard(theme: theme) {
-                    VStack(alignment: .leading, spacing: 18) {
+                SettingsSectionCard(
+                    theme: theme,
+                    systemImage: "paintpalette",
+                    title: "Appearance",
+                    description: "Tune the accent color and window appearance Aura uses."
+                ) {
+                    SettingsControlRow(
+                        title: "Aura Color",
+                        description: "This changes the accent color used across the app and overlay."
+                    ) {
                         Picker("Color Scheme", selection: auraColorBinding) {
                             ForEach(AuraColorOption.allCases) { option in
                                 AuraColorOptionLabel(option: option).tag(option)
                             }
                         }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
 
+                    SettingsRowDivider()
+
+                    SettingsControlRow(
+                        title: "Window Appearance",
+                        description: "Follow the system or force Aura to stay light or dark."
+                    ) {
                         Picker("Appearance", selection: appearanceBinding) {
                             ForEach(AppAppearanceOption.allCases) { option in
                                 Text(option.label).tag(option)
                             }
                         }
+                        .labelsHidden()
+                        .frame(width: 220)
                     }
                 }
 
-                SettingsCard(theme: theme) {
-                    VStack(alignment: .leading, spacing: 18) {
+                SettingsSectionCard(
+                    theme: theme,
+                    systemImage: "power",
+                    title: "Startup & Tools",
+                    description: "Control how Aura launches and reopen its support flows when needed."
+                ) {
+                    SettingsControlRow(
+                        title: "Launch at Login",
+                        description: "Open Aura automatically after you sign in to your Mac."
+                    ) {
                         Toggle("Launch at login", isOn: Binding(
                             get: { appState.isLaunchAtLoginEnabled },
                             set: { appState.setLaunchAtLogin(enabled: $0) }
                         ))
+                        .labelsHidden()
                     }
-                }
 
-                HStack {
-                    Spacer()
+                    SettingsRowDivider()
 
-                    Button(action: appState.presentSetupOverlay) {
-                        Label("Redo Setup", systemImage: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                    SettingsControlRow(
+                        title: "Setup Assistant",
+                        description: "Revisit permissions and the model download flow from the beginning."
+                    ) {
+                        Button("Redo Setup", action: appState.presentSetupOverlay)
+                            .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
                     }
-                    .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
 
-                    Button(action: appState.openTranscriptionsFolder) {
-                        Label("Debug Transcriptions", systemImage: "folder")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                    SettingsRowDivider()
+
+                    SettingsControlRow(
+                        title: "Debug Transcriptions",
+                        description: "Open the temporary folder Aura uses while processing recordings."
+                    ) {
+                        Button("Open Folder", action: appState.openTranscriptionsFolder)
+                            .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
                     }
-                    .buttonStyle(SettingsSubtleGhostButtonStyle(theme: theme))
                 }
             }
-            .padding(28)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
     }
 
@@ -475,6 +618,154 @@ private struct SettingsDetailView: View {
         )
     }
 
+}
+
+private struct SettingsPageHeader<Accessory: View>: View {
+    let title: String
+    let subtitle: String
+    let detail: String?
+    @ViewBuilder let accessory: Accessory
+
+    init(
+        title: String,
+        subtitle: String,
+        detail: String? = nil,
+        @ViewBuilder accessory: () -> Accessory = { EmptyView() }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.detail = detail
+        self.accessory = accessory()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 28, weight: .semibold))
+
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let detail, detail.isEmpty == false {
+                    Text(detail)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 16)
+
+            accessory
+        }
+    }
+}
+
+private struct SettingsSectionCard<Content: View>: View {
+    let theme: AuraTheme
+    let systemImage: String
+    let title: String
+    let description: String
+    @ViewBuilder let content: Content
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        SettingsCard(theme: theme, contentPadding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 14) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(iconBackground)
+                        .frame(width: 34, height: 34)
+                        .overlay {
+                            Image(systemName: systemImage)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(theme.accentStrong.color)
+                        }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 16, weight: .semibold))
+
+                        Text(description)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 14)
+
+                Divider()
+                    .padding(.horizontal, 20)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    content
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+            }
+        }
+    }
+
+    private var iconBackground: Color {
+        theme.accentStrong.color.opacity(colorScheme == .dark ? 0.18 : 0.10)
+    }
+}
+
+private struct SettingsControlRow<Control: View>: View {
+    let title: String
+    let description: String
+    @ViewBuilder let control: Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 18)
+
+            control
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+    }
+}
+
+private struct SettingsRowDivider: View {
+    var body: some View {
+        Divider()
+    }
+}
+
+private struct SettingsValueBadge: View {
+    let text: String
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+            )
+    }
 }
 
 struct VoiceResponseHistoryHomeCard: View {
@@ -799,6 +1090,29 @@ enum ShortcutPreset: String, CaseIterable, Identifiable {
             self = .custom
         }
     }
+}
+
+private func currentAppVersionDisplay(bundle: Bundle = .main) -> String {
+    let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    let buildNumber = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if let shortVersion, shortVersion.isEmpty == false,
+       let buildNumber, buildNumber.isEmpty == false,
+       buildNumber != shortVersion {
+        return "Version \(shortVersion) (\(buildNumber))"
+    }
+
+    if let shortVersion, shortVersion.isEmpty == false {
+        return "Version \(shortVersion)"
+    }
+
+    if let buildNumber, buildNumber.isEmpty == false {
+        return "Version \(buildNumber)"
+    }
+
+    return "Version unavailable"
 }
 
 struct SettingsCard<Content: View>: View {
