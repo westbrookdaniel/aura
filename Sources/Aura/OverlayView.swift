@@ -46,18 +46,26 @@ struct RecorderOverlayView: View {
         ZStack(alignment: .bottom) {
             switch visualState.state {
             case .recording(let isProcessing):
-                listeningAura(isProcessing: isProcessing)
-                    .opacity(auraDisplayOpacity(isProcessing: isProcessing))
-                    .scaleEffect(loadingScale(isProcessing: isProcessing), anchor: .bottom)
-                    .animation(.easeInOut(duration: 0.12), value: recordingLevel)
-                    .animation(.easeInOut(duration: 0.20), value: isProcessing)
-                    .animation(.easeInOut(duration: 0.82), value: loadingPulse)
-                    .onAppear {
-                        updateLoadingPulse(isProcessing)
+                ZStack(alignment: .bottom) {
+                    listeningAura(isProcessing: isProcessing)
+                        .opacity(auraDisplayOpacity(isProcessing: isProcessing))
+                        .scaleEffect(loadingScale(isProcessing: isProcessing), anchor: .bottom)
+                        .animation(.easeInOut(duration: 0.12), value: recordingLevel)
+                        .animation(.easeInOut(duration: 0.20), value: isProcessing)
+                        .animation(.easeInOut(duration: 0.82), value: loadingPulse)
+                        .onAppear {
+                            updateLoadingPulse(isProcessing)
+                        }
+                        .onChange(of: isProcessing) { newValue in
+                            updateLoadingPulse(newValue)
+                        }
+
+                    if isProcessing {
+                        loadingIndicator
+                            .padding(.bottom, 26)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
-                    .onChange(of: isProcessing) { newValue in
-                        updateLoadingPulse(newValue)
-                    }
+                }
             case .alert(let message, _):
                 Text(message)
                     .font(.system(size: 12, weight: .semibold))
@@ -74,6 +82,26 @@ struct RecorderOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.18), value: visualState.state)
+    }
+
+    private var loadingIndicator: some View {
+        ZStack {
+            Circle()
+                .fill(Color.black.opacity(0.94))
+                .frame(width: loadingIndicatorDiameter, height: loadingIndicatorDiameter)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.94), lineWidth: 1.2)
+                )
+                .shadow(color: Color.black.opacity(0.26), radius: 10, y: 3)
+
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(.white)
+                .scaleEffect(0.52)
+        }
+        .frame(width: loadingIndicatorDiameter + 6, height: loadingIndicatorDiameter + 6)
     }
 
     private var auraOpacity: CGFloat {
@@ -192,6 +220,10 @@ struct RecorderOverlayView: View {
 
     private var theme: AuraTheme {
         visualState.auraColor.theme
+    }
+
+    private var loadingIndicatorDiameter: CGFloat {
+        28
     }
 
     private func auraMetrics(isProcessing: Bool) -> AuraMetrics {
