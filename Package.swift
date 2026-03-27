@@ -12,9 +12,7 @@ let package = Package(
             targets: ["Aura"]
         )
     ],
-    dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.8.1")
-    ],
+    dependencies: [],
     targets: [
         .binaryTarget(
             name: "WhisperFramework",
@@ -24,8 +22,7 @@ let package = Package(
         .executableTarget(
             name: "Aura",
             dependencies: [
-                "WhisperFramework",
-                .product(name: "Sparkle", package: "Sparkle")
+                "WhisperFramework"
             ],
             path: "Sources/Aura",
             linkerSettings: [

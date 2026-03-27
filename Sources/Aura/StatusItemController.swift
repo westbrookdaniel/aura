@@ -30,17 +30,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func configureMenu() {
         menu.delegate = self
 
-        let checkForUpdatesItem = NSMenuItem(
-            title: "Check for Updates...",
-            action: nil,
-            keyEquivalent: ""
-        )
-        appState.updater.configure(checkForUpdatesMenuItem: checkForUpdatesItem)
-        if checkForUpdatesItem.isHidden == false {
-            menu.addItem(checkForUpdatesItem)
-            menu.addItem(.separator())
-        }
-
         menu.addItem(NSMenuItem(
             title: "Settings",
             action: #selector(openSettings),

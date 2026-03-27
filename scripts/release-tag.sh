@@ -3,17 +3,13 @@ set -euo pipefail
 
 APP_NAME="Aura"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_UPDATES_DIR="${ROOT_DIR}/docs"
 
 VERSION="${AURA_VERSION:-}"
 SHORT_VERSION="${AURA_SHORT_VERSION:-}"
 SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
 TEAM_ID="${AURA_TEAM_ID:-}"
 NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-}"
-UPDATES_DIR="${DEFAULT_UPDATES_DIR}"
-SPARKLE_BIN_DIR="${SPARKLE_BIN_DIR:-}"
 TAG_PREFIX="${AURA_RELEASE_TAG_PREFIX:-v}"
-COMMIT_MESSAGE=""
 TAG_MESSAGE=""
 NOTARIZE=0
 
@@ -21,8 +17,8 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") --version <version> [options]
 
-Builds a release archive, publishes Sparkle artifacts into docs/, commits the
-release files, and creates an annotated git tag.
+Builds a release archive in dist/ and creates an annotated git tag for the
+current commit.
 
 Options:
   --version <version>         Release version (required)
@@ -31,10 +27,7 @@ Options:
   --team-id <id>              Apple Developer Team ID passed to build-app.sh
   --notary-profile <name>     notarytool keychain profile passed to build-app.sh
   --notarize                  Notarize and staple the app before publishing
-  --updates-dir <path>        Directory where appcast artifacts are published
-  --sparkle-bin-dir <path>    Directory containing Sparkle's generate_appcast
   --tag-prefix <prefix>       Prefix for the git tag (default: ${TAG_PREFIX})
-  --commit-message <message>  Override the git commit message
   --tag-message <message>     Override the annotated git tag message
   --help                      Show this help text
 
@@ -45,7 +38,6 @@ Environment variables:
   AURA_TEAM_ID
   AURA_NOTARY_PROFILE
   AURA_RELEASE_TAG_PREFIX
-  SPARKLE_BIN_DIR
 EOF
 }
 
@@ -66,20 +58,6 @@ ensure_clean_worktree() {
         echo "Commit or stash your changes, then rerun this script." >&2
         exit 1
     fi
-}
-
-path_is_allowed() {
-    local candidate="$1"
-    shift
-
-    local allowed_path
-    for allowed_path in "$@"; do
-        if [[ "${candidate}" == "${allowed_path}" ]]; then
-            return 0
-        fi
-    done
-
-    return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -113,24 +91,9 @@ while [[ $# -gt 0 ]]; do
             NOTARIZE=1
             shift
             ;;
-        --updates-dir)
-            require_option_value "$1" "${2-}"
-            UPDATES_DIR="$2"
-            shift 2
-            ;;
-        --sparkle-bin-dir)
-            require_option_value "$1" "${2-}"
-            SPARKLE_BIN_DIR="$2"
-            shift 2
-            ;;
         --tag-prefix)
             require_option_value "$1" "${2-}"
             TAG_PREFIX="$2"
-            shift 2
-            ;;
-        --commit-message)
-            require_option_value "$1" "${2-}"
-            COMMIT_MESSAGE="$2"
             shift 2
             ;;
         --tag-message)
@@ -161,11 +124,8 @@ if [[ -z "${SHORT_VERSION}" ]]; then
 fi
 
 TAG_NAME="${TAG_PREFIX}${VERSION}"
-if [[ -z "${COMMIT_MESSAGE}" ]]; then
-    COMMIT_MESSAGE="Release ${TAG_NAME}"
-fi
 if [[ -z "${TAG_MESSAGE}" ]]; then
-    TAG_MESSAGE="${COMMIT_MESSAGE}"
+    TAG_MESSAGE="Release ${TAG_NAME}"
 fi
 
 if [[ ! -d "${ROOT_DIR}/.git" ]]; then
@@ -205,68 +165,21 @@ fi
 echo "Building ${APP_NAME} ${VERSION}..."
 "${BUILD_CMD[@]}"
 
-PUBLISH_CMD=(
-    "${ROOT_DIR}/scripts/publish-appcast.sh"
-    "--version" "${VERSION}"
-    "--updates-dir" "${UPDATES_DIR}"
-)
-
-if [[ -n "${SPARKLE_BIN_DIR}" ]]; then
-    PUBLISH_CMD+=("--sparkle-bin-dir" "${SPARKLE_BIN_DIR}")
-fi
-
-echo "Publishing Sparkle artifacts..."
-"${PUBLISH_CMD[@]}"
-
-RELEASE_PATHS=(
-    "${UPDATES_DIR}/appcast.xml"
-    "${UPDATES_DIR}/${APP_NAME}-${VERSION}.zip"
-)
-
-for extension in html md; do
-    if [[ -f "${UPDATES_DIR}/${APP_NAME}-${VERSION}.${extension}" ]]; then
-        RELEASE_PATHS+=("${UPDATES_DIR}/${APP_NAME}-${VERSION}.${extension}")
-    fi
-done
-
-RELEASE_GIT_PATHS=()
-for release_path in "${RELEASE_PATHS[@]}"; do
-    if [[ "${release_path}" != "${ROOT_DIR}/"* ]]; then
-        echo "Release path ${release_path} is outside the git repository." >&2
-        exit 1
-    fi
-
-    RELEASE_GIT_PATHS+=("${release_path#"${ROOT_DIR}/"}")
-done
-
-mapfile -t CHANGED_TRACKED_PATHS < <(git -C "${ROOT_DIR}" diff --name-only)
-for changed_path in "${CHANGED_TRACKED_PATHS[@]}"; do
-    if ! path_is_allowed "${changed_path}" "${RELEASE_GIT_PATHS[@]}"; then
-        echo "Build produced an unexpected tracked change outside release artifacts: ${changed_path}" >&2
-        echo "Review the repository state before creating a release commit." >&2
-        exit 1
-    fi
-done
-
-echo "Creating release commit..."
-git -C "${ROOT_DIR}" add -- "${RELEASE_GIT_PATHS[@]}"
-
-if git -C "${ROOT_DIR}" diff --cached --quiet; then
-    echo "No release artifact changes were staged; aborting before commit/tag." >&2
+if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain)" ]]; then
+    echo "Build produced a dirty worktree. Review the generated changes before tagging a release." >&2
     exit 1
 fi
 
-git -C "${ROOT_DIR}" commit -m "${COMMIT_MESSAGE}"
 RELEASE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 
 echo "Creating annotated tag ${TAG_NAME} on ${RELEASE_COMMIT}..."
 git -C "${ROOT_DIR}" tag -a "${TAG_NAME}" "${RELEASE_COMMIT}" -m "${TAG_MESSAGE}"
 
 echo
-echo "Release commit and tag created successfully:"
+echo "Release tag created successfully:"
+echo "  archive: ${ROOT_DIR}/dist/${APP_NAME}-${VERSION}.zip"
 echo "  commit: ${RELEASE_COMMIT}"
-echo "  commit message: ${COMMIT_MESSAGE}"
 echo "  tag: ${TAG_NAME}"
 echo
 echo "Next step:"
-echo "  git push origin HEAD --follow-tags"
+echo "  git push origin ${TAG_NAME}"

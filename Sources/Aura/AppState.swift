@@ -35,7 +35,6 @@ final class AppState: ObservableObject {
     let audioRecorder: AudioRecorder
     let transcriptionEngine: TranscriptionEngine
     let insertionService: TextInsertionService
-    let updater: AppUpdater
 
     private var cancellables = Set<AnyCancellable>()
     private var activeRecordingURL: URL?
@@ -51,8 +50,7 @@ final class AppState: ObservableObject {
         overlayController: OverlayPanelController = OverlayPanelController(),
         audioRecorder: AudioRecorder = AudioRecorder(),
         transcriptionEngine: TranscriptionEngine = WhisperCPPTranscriptionEngine(),
-        insertionService: TextInsertionService = PasteTextInsertionService(),
-        updater: AppUpdater = AppUpdater()
+        insertionService: TextInsertionService = PasteTextInsertionService()
     ) {
         self.preferences = preferences
         self.permissionsManager = permissionsManager
@@ -61,7 +59,6 @@ final class AppState: ObservableObject {
         self.audioRecorder = audioRecorder
         self.transcriptionEngine = transcriptionEngine
         self.insertionService = insertionService
-        self.updater = updater
 
         bind()
     }
