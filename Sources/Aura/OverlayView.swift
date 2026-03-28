@@ -88,17 +88,17 @@ struct RecorderOverlayView: View {
     private var loadingIndicator: some View {
         ZStack {
             Circle()
-                .fill(Color.black.opacity(0.94))
+                .fill(Color.white)
                 .frame(width: loadingIndicatorDiameter, height: loadingIndicatorDiameter)
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.94), lineWidth: 1.2)
+                        .stroke(Color.black.opacity(0.12), lineWidth: 1.2)
                 )
-                .shadow(color: Color.black.opacity(0.26), radius: 10, y: 3)
+                .shadow(color: Color.black.opacity(0.16), radius: 10, y: 3)
 
             ProgressView()
                 .progressViewStyle(.circular)
-                .tint(.white)
+                .tint(Color.black.opacity(0.55))
                 .scaleEffect(0.52)
         }
         .frame(width: loadingIndicatorDiameter + 6, height: loadingIndicatorDiameter + 6)

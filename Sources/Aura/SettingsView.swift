@@ -158,7 +158,12 @@ struct SettingsView: View {
     }
 
     private var sidebarBackground: some View {
-        Color(nsColor: .underPageBackgroundColor)
+        ZStack {
+            Color(nsColor: .underPageBackgroundColor)
+
+            Color.white
+                .opacity(colorScheme == .dark ? 0.05 : 0.62)
+        }
     }
 
     private var detailBackground: some View {
@@ -203,24 +208,19 @@ private struct SettingsSidebarHeader: View {
     var body: some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            theme.accentStrong.color,
-                            theme.accentMuted.color
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.82))
                 .frame(width: 28, height: 28)
                 .overlay {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.96))
+                    Image(nsImage: AuraStatusIcon.makeTemplateImage(size: 14))
+                        .renderingMode(.template)
+                        .foregroundStyle(colorScheme == .dark ? .white.opacity(0.88) : .black.opacity(0.72))
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.08), lineWidth: 1)
+                )
                 .shadow(
-                    color: theme.shadow.color.opacity(colorScheme == .dark ? 0.12 : 0.08),
+                    color: Color.black.opacity(colorScheme == .dark ? 0.16 : 0.06),
                     radius: 6,
                     x: 0,
                     y: 3
@@ -286,12 +286,14 @@ private struct SidebarDestinationButton: View {
     private var activeBackground: Color {
         guard isSelected else { return .clear }
 
-        return theme.accentStrong.color.opacity(colorScheme == .dark ? 0.16 : 0.10)
+        return colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
     }
 }
 
 private struct SettingsHomeView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var copiedFeedbackText: String?
+    @State private var isClearHistoryConfirmationPresented = false
 
     let theme: AuraTheme
 
@@ -305,20 +307,50 @@ private struct SettingsHomeView: View {
                     Spacer()
 
                     if appState.preferences.voiceTextHistory.isEmpty == false {
-                        Button("Clear History", role: .destructive, action: appState.clearVoiceTextHistory)
+                        HStack(spacing: 10) {
+                            HistoryCopyFeedbackBanner(
+                                isVisible: copiedFeedbackText != nil,
+                                theme: theme
+                            )
+
+                            Button("Clear History") {
+                                isClearHistoryConfirmationPresented = true
+                            }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                        }
                     }
                 }
 
                 VoiceResponseHistoryHomeCard(
                     items: appState.preferences.voiceTextHistory,
                     theme: theme,
-                    onDelete: { appState.removeVoiceTextHistoryItem(id: $0.id) }
+                    onDelete: { appState.removeVoiceTextHistoryItem(id: $0.id) },
+                    onCopy: handleCopy
                 )
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 24)
+        }
+        .animation(.easeInOut(duration: 0.18), value: copiedFeedbackText)
+        .alert("Clear history?", isPresented: $isClearHistoryConfirmationPresented) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear History", role: .destructive) {
+                appState.clearVoiceTextHistory()
+            }
+        } message: {
+            Text("This removes all saved transcripts from Aura history.")
+        }
+    }
+
+    private func handleCopy(_ item: VoiceTextHistoryItem) {
+        copiedFeedbackText = item.text
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            if copiedFeedbackText == item.text {
+                copiedFeedbackText = nil
+            }
         }
     }
 }
@@ -344,8 +376,7 @@ private struct SettingsDetailView: View {
                     )
                 }
 
-                SettingsSectionEyebrow("Shortcut")
-                SettingsInsetGroup(theme: theme) {
+                SettingsSection(theme: theme, title: "Shortcut") {
                     SettingsSimpleRow(title: "Press and hold") {
                         Picker("Shortcut", selection: presetShortcutBinding) {
                             ForEach(ShortcutPreset.allCases) { preset in
@@ -375,8 +406,7 @@ private struct SettingsDetailView: View {
                     }
                 }
 
-                SettingsSectionEyebrow("Microphone")
-                SettingsInsetGroup(theme: theme) {
+                SettingsSection(theme: theme, title: "Microphone") {
                     SettingsSimpleRow(title: "Input") {
                         Picker("Microphone", selection: microphoneSelectionBinding) {
                             Text(systemDefaultMicrophoneLabel).tag(Optional<UInt32>.none)
@@ -390,8 +420,7 @@ private struct SettingsDetailView: View {
                     }
                 }
 
-                SettingsSectionEyebrow("Appearance")
-                SettingsInsetGroup(theme: theme) {
+                SettingsSection(theme: theme, title: "Appearance") {
                     SettingsSimpleRow(title: "Accent") {
                         Picker("Color Scheme", selection: auraColorBinding) {
                             ForEach(AuraColorOption.allCases) { option in
@@ -415,8 +444,7 @@ private struct SettingsDetailView: View {
                     }
                 }
 
-                SettingsSectionEyebrow("Startup")
-                SettingsInsetGroup(theme: theme) {
+                SettingsSection(theme: theme, title: "Startup") {
                     SettingsSimpleRow(title: "Launch at login") {
                         Toggle("Launch at login", isOn: Binding(
                             get: { appState.isLaunchAtLoginEnabled },
@@ -426,8 +454,7 @@ private struct SettingsDetailView: View {
                     }
                 }
 
-                SettingsSectionEyebrow("Tools")
-                SettingsInsetGroup(theme: theme) {
+                SettingsSection(theme: theme, title: "Tools") {
                     SettingsSimpleRow(title: "Setup Assistant") {
                         Button("Redo Setup", action: appState.presentSetupOverlay)
                             .buttonStyle(.bordered)
@@ -524,6 +551,21 @@ private struct SettingsSectionEyebrow: View {
     }
 }
 
+private struct SettingsSection<Content: View>: View {
+    let theme: AuraTheme
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SettingsSectionEyebrow(title)
+            SettingsInsetGroup(theme: theme) {
+                content
+            }
+        }
+    }
+}
+
 private struct SettingsInsetGroup<Content: View>: View {
     let theme: AuraTheme
     @ViewBuilder let content: Content
@@ -552,6 +594,8 @@ private struct SettingsSimpleRow<Control: View>: View {
     let title: String
     @ViewBuilder let control: Control
 
+    private let controlColumnWidth: CGFloat = 260
+
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             Text(title)
@@ -560,6 +604,7 @@ private struct SettingsSimpleRow<Control: View>: View {
             Spacer(minLength: 16)
 
             control
+                .frame(width: controlColumnWidth, alignment: .trailing)
         }
         .padding(.vertical, 12)
     }
@@ -717,22 +762,12 @@ struct VoiceResponseHistoryHomeCard: View {
     let items: [VoiceTextHistoryItem]
     let theme: AuraTheme
     let onDelete: (VoiceTextHistoryItem) -> Void
+    let onCopy: (VoiceTextHistoryItem) -> Void
 
     private let calendar = Calendar.autoupdatingCurrent
-    @State private var copiedFeedbackText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Spacer()
-
-                HistoryCopyFeedbackBanner(
-                    isVisible: copiedFeedbackText != nil,
-                    theme: theme
-                )
-            }
-            .padding(.top, 2)
-
             if items.isEmpty {
                 SettingsInsetGroup(theme: theme) {
                     Text("Your transcripts will show up here after a dictation.")
@@ -751,28 +786,16 @@ struct VoiceResponseHistoryHomeCard: View {
                             section: section,
                             theme: theme,
                             onDelete: onDelete,
-                            onCopy: handleCopy
+                            onCopy: onCopy
                         )
                     }
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: copiedFeedbackText)
     }
 
     private var sections: [HistoryDaySection] {
         HistorySectionBuilder.makeSections(from: items, calendar: calendar)
-    }
-
-    private func handleCopy(_ item: VoiceTextHistoryItem) {
-        copiedFeedbackText = item.text
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.6))
-            if copiedFeedbackText == item.text {
-                copiedFeedbackText = nil
-            }
-        }
     }
 }
 

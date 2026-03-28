@@ -11,6 +11,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Aura"
+        window.titleVisibility = .hidden
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
