@@ -15,6 +15,18 @@ extension AppAppearanceOption {
     }
 }
 
+private extension NSAppearance {
+    static func currentSystemAppearance() -> NSAppearance {
+        let defaults = UserDefaults.standard
+        let interfaceStyle = defaults.string(forKey: "AppleInterfaceStyle")?.lowercased()
+        if interfaceStyle == "dark" {
+            return NSAppearance(named: .darkAqua)!
+        }
+
+        return NSAppearance(named: .aqua)!
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var sessionState: RecordingSessionState = .idle
@@ -254,10 +266,25 @@ final class AppState: ObservableObject {
                 self?.refreshMicrophones()
             }
             .store(in: &cancellables)
+
+        DistributedNotificationCenter.default()
+            .publisher(for: Notification.Name("AppleInterfaceThemeChangedNotification"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.preferences.appearance == .system else { return }
+                self.applyAppearance(.system)
+            }
+            .store(in: &cancellables)
     }
 
     private func applyAppearance(_ appearance: AppAppearanceOption) {
-        let nsAppearance = appearance.nsAppearance
+        let nsAppearance: NSAppearance?
+        switch appearance {
+        case .system:
+            nsAppearance = .currentSystemAppearance()
+        case .light, .dark:
+            nsAppearance = appearance.nsAppearance
+        }
         NSApp.appearance = nsAppearance
         SettingsWindowController.shared.updateAppearance(nsAppearance)
         overlayController.updateAppearance(nsAppearance)

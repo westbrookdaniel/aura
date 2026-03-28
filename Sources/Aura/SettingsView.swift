@@ -162,8 +162,9 @@ struct SettingsView: View {
 
             LinearGradient(
                 colors: [
-                    theme.accentStrong.color.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                    theme.accentMuted.color.opacity(colorScheme == .dark ? 0.08 : 0.05),
+                    theme.accentStrong.color.opacity(colorScheme == .dark ? 0.18 : 0.22),
+                    theme.accentMuted.color.opacity(colorScheme == .dark ? 0.08 : 0.12),
+                    theme.accentSoft.color.opacity(colorScheme == .dark ? 0.03 : 0.08),
                     Color.clear
                 ],
                 startPoint: .topLeading,
@@ -175,7 +176,7 @@ struct SettingsView: View {
 
     private var sidebarBackground: some View {
         Color.white
-            .opacity(colorScheme == .dark ? 0.03 : 0.5)
+            .opacity(colorScheme == .dark ? 0.03 : 0.36)
     }
 
     private var detailBackground: some View {
@@ -229,7 +230,12 @@ private struct SettingsSidebarHeader: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.08), lineWidth: 1)
+                        .stroke(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.18)
+                                : Color.black.opacity(0.08),
+                            lineWidth: 1
+                        )
                 )
                 .shadow(
                     color: Color.black.opacity(colorScheme == .dark ? 0.16 : 0.06),
