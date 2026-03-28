@@ -90,7 +90,6 @@ final class AppPreferencesStore: ObservableObject {
     }
 
     private let defaults = UserDefaults.standard
-    private static let legacyBaseModelFilename = "ggml-base.en.bin"
 
     private enum Keys {
         static let shortcut = "shortcut"
@@ -107,13 +106,7 @@ final class AppPreferencesStore: ObservableObject {
     private init() {
         shortcut = Self.decode(Keys.shortcut) ?? .default
         let expectedModelPath = WhisperInstallService.expectedModelPath()
-        let storedModelPath = defaults.string(forKey: Keys.modelPath)
-        if let storedModelPath,
-           NSString(string: storedModelPath).lastPathComponent == Self.legacyBaseModelFilename {
-            modelPath = expectedModelPath
-        } else {
-            modelPath = storedModelPath ?? expectedModelPath
-        }
+        modelPath = defaults.string(forKey: Keys.modelPath) ?? expectedModelPath
         if defaults.object(forKey: Keys.selectedMicrophoneID) != nil {
             selectedMicrophoneID = UInt32(defaults.integer(forKey: Keys.selectedMicrophoneID))
         } else {
