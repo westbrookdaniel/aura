@@ -3,8 +3,6 @@ set -euo pipefail
 
 APP_NAME="Aura"
 DEVELOPER_NAME="Daniel Westbrook"
-APPLE_ID_DEFAULT="westy12dan@gmail.com"
-DEFAULT_NOTARY_PROFILE="aura-notary"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 APP_BUNDLE="${DIST_DIR}/${APP_NAME}.app"
@@ -24,11 +22,7 @@ MIN_SYSTEM_VERSION="${AURA_MIN_SYSTEM_VERSION:-13.3}"
 MICROPHONE_USAGE="${AURA_MICROPHONE_USAGE:-Aura needs microphone access to capture dictation audio.}"
 SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
 TEAM_ID="${AURA_TEAM_ID:-}"
-NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
 APP_ICON_PATH="${AURA_APP_ICON:-${DEFAULT_APP_ICON_PATH}}"
-
-ARCHIVE=1
-NOTARIZE=0
 
 require_option_value() {
     local option_name="$1"
@@ -104,9 +98,6 @@ Options:
   --short-version <version> CFBundleShortVersionString
   --sign <identity>         Code signing identity for codesign
   --team-id <id>            Apple Developer Team ID
-  --notary-profile <name>   notarytool keychain profile to use for notarization
-  --archive                 Create a zip archive in dist/ (default)
-  --notarize                Submit the app zip for notarization and staple the result
   --help                    Show this help text
 
 Environment variables:
@@ -117,14 +108,11 @@ Environment variables:
   AURA_MICROPHONE_USAGE
   AURA_CODESIGN_IDENTITY
   AURA_TEAM_ID
-  AURA_NOTARY_PROFILE
   AURA_APP_ICON
 
 Defaults:
   bundle id: ${BUNDLE_ID}
   developer: ${DEVELOPER_NAME}
-  apple id: ${APPLE_ID_DEFAULT}
-  notary profile: ${NOTARY_PROFILE}
 EOF
 }
 
@@ -156,20 +144,6 @@ while [[ $# -gt 0 ]]; do
             TEAM_ID="$2"
             shift 2
             ;;
-        --notary-profile)
-            require_option_value "$1" "${2-}"
-            NOTARY_PROFILE="$2"
-            shift 2
-            ;;
-        --archive)
-            ARCHIVE=1
-            shift
-            ;;
-        --notarize)
-            NOTARIZE=1
-            ARCHIVE=1
-            shift
-            ;;
         --help)
             usage
             exit 0
@@ -191,16 +165,6 @@ ARCHIVE_PATH="${DIST_DIR}/${ARCHIVE_FILENAME}"
 
 if [[ -z "${SIGN_IDENTITY}" && -n "${TEAM_ID}" ]]; then
     SIGN_IDENTITY="Developer ID Application: ${DEVELOPER_NAME} (${TEAM_ID})"
-fi
-
-if [[ "${NOTARIZE}" -eq 1 && -z "${NOTARY_PROFILE}" ]]; then
-    echo "Notarization requires --notary-profile or AURA_NOTARY_PROFILE." >&2
-    exit 1
-fi
-
-if [[ "${NOTARIZE}" -eq 1 && -z "${SIGN_IDENTITY}" ]]; then
-    echo "Notarization requires --sign or AURA_CODESIGN_IDENTITY." >&2
-    exit 1
 fi
 
 mkdir -p "${DIST_DIR}" "${CLANG_CACHE_DIR}" "${SWIFTPM_CACHE_DIR}" "${ORG_SWIFTPM_CACHE_DIR}" "${TMP_DIR}"
@@ -270,26 +234,11 @@ else
     echo "Skipping code signing. Set AURA_CODESIGN_IDENTITY or pass --sign to sign the app."
 fi
 
-if [[ "${ARCHIVE}" -eq 1 ]]; then
-    echo "Creating zip archive..."
-    ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ARCHIVE_PATH}"
-fi
-
-if [[ "${NOTARIZE}" -eq 1 ]]; then
-    echo "Submitting ${ARCHIVE_FILENAME} for notarization..."
-    xcrun notarytool submit "${ARCHIVE_PATH}" --keychain-profile "${NOTARY_PROFILE}" --wait
-    echo "Stapling notarization ticket..."
-    xcrun stapler staple "${APP_BUNDLE}"
-    echo "Rebuilding zip archive with stapled app..."
-    rm -f "${ARCHIVE_PATH}"
-    ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ARCHIVE_PATH}"
-fi
+echo "Creating zip archive..."
+ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ARCHIVE_PATH}"
 
 echo
 echo "App bundle ready at:"
 echo "  ${APP_BUNDLE}"
-
-if [[ "${ARCHIVE}" -eq 1 ]]; then
-    echo "Archive ready at:"
-    echo "  ${ARCHIVE_PATH}"
-fi
+echo "Archive ready at:"
+echo "  ${ARCHIVE_PATH}"

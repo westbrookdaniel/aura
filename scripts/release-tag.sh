@@ -8,10 +8,8 @@ VERSION="${AURA_VERSION:-}"
 SHORT_VERSION="${AURA_SHORT_VERSION:-}"
 SIGN_IDENTITY="${AURA_CODESIGN_IDENTITY:-}"
 TEAM_ID="${AURA_TEAM_ID:-}"
-NOTARY_PROFILE="${AURA_NOTARY_PROFILE:-}"
 TAG_PREFIX="${AURA_RELEASE_TAG_PREFIX:-v}"
 TAG_MESSAGE=""
-NOTARIZE=0
 
 usage() {
     cat <<EOF
@@ -25,8 +23,6 @@ Options:
   --short-version <version>   CFBundleShortVersionString to embed
   --sign <identity>           Code signing identity passed to build-app.sh
   --team-id <id>              Apple Developer Team ID passed to build-app.sh
-  --notary-profile <name>     notarytool keychain profile passed to build-app.sh
-  --notarize                  Notarize and staple the app before publishing
   --tag-prefix <prefix>       Prefix for the git tag (default: ${TAG_PREFIX})
   --tag-message <message>     Override the annotated git tag message
   --help                      Show this help text
@@ -36,7 +32,6 @@ Environment variables:
   AURA_SHORT_VERSION
   AURA_CODESIGN_IDENTITY
   AURA_TEAM_ID
-  AURA_NOTARY_PROFILE
   AURA_RELEASE_TAG_PREFIX
 EOF
 }
@@ -81,15 +76,6 @@ while [[ $# -gt 0 ]]; do
             require_option_value "$1" "${2-}"
             TEAM_ID="$2"
             shift 2
-            ;;
-        --notary-profile)
-            require_option_value "$1" "${2-}"
-            NOTARY_PROFILE="$2"
-            shift 2
-            ;;
-        --notarize)
-            NOTARIZE=1
-            shift
             ;;
         --tag-prefix)
             require_option_value "$1" "${2-}"
@@ -155,14 +141,6 @@ fi
 
 if [[ -n "${TEAM_ID}" ]]; then
     BUILD_CMD+=("--team-id" "${TEAM_ID}")
-fi
-
-if [[ -n "${NOTARY_PROFILE}" ]]; then
-    BUILD_CMD+=("--notary-profile" "${NOTARY_PROFILE}")
-fi
-
-if [[ "${NOTARIZE}" -eq 1 ]]; then
-    BUILD_CMD+=("--notarize")
 fi
 
 echo "Building ${APP_NAME} ${VERSION}..."
