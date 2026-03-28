@@ -125,49 +125,61 @@ struct SettingsView: View {
     }
 
     private var settingsContent: some View {
-        HStack(spacing: 0) {
-            ZStack(alignment: .trailing) {
-                sidebarBackground.ignoresSafeArea(edges: .top)
+        ZStack {
+            pageBackground.ignoresSafeArea()
 
-                SettingsSidebar(
-                    selectedDestination: $selectedDestination,
-                    theme: theme
-                )
+            HStack(spacing: 0) {
+                ZStack(alignment: .trailing) {
+                    sidebarBackground.ignoresSafeArea(edges: .top)
 
-                Rectangle()
-                    .fill(theme.divider(for: colorScheme))
-                    .frame(width: 1)
-                    .ignoresSafeArea(edges: .top)
-            }
-            .frame(width: 214)
-            .frame(maxHeight: .infinity)
-
-            Group {
-                switch selectedDestination {
-                case .history:
-                    SettingsHomeView(theme: theme)
-                        .environmentObject(appState)
-                case .settings:
-                    SettingsDetailView(theme: theme)
-                        .environmentObject(appState)
+                    SettingsSidebar(
+                        selectedDestination: $selectedDestination,
+                        theme: theme
+                    )
                 }
+                .frame(width: 214)
+                .frame(maxHeight: .infinity)
+
+                Group {
+                    switch selectedDestination {
+                    case .history:
+                        SettingsHomeView(theme: theme)
+                            .environmentObject(appState)
+                    case .settings:
+                        SettingsDetailView(theme: theme)
+                            .environmentObject(appState)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(detailBackground.ignoresSafeArea())
             }
+        }
+    }
+
+    private var pageBackground: some View {
+        ZStack(alignment: .topLeading) {
+            Color(colorScheme == .dark ? NSColor.windowBackgroundColor : NSColor(calibratedWhite: 0.93, alpha: 1))
+
+            LinearGradient(
+                colors: [
+                    theme.accentStrong.color.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                    theme.accentMuted.color.opacity(colorScheme == .dark ? 0.08 : 0.05),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(detailBackground.ignoresSafeArea())
         }
     }
 
     private var sidebarBackground: some View {
-        ZStack {
-            Color(nsColor: .underPageBackgroundColor)
-
-            Color.white
-                .opacity(colorScheme == .dark ? 0.05 : 0.62)
-        }
+        Color.white
+            .opacity(colorScheme == .dark ? 0.03 : 0.5)
     }
 
     private var detailBackground: some View {
-        Color(nsColor: .windowBackgroundColor)
+        Color.clear
     }
 }
 
@@ -316,8 +328,7 @@ private struct SettingsHomeView: View {
                             Button("Clear History") {
                                 isClearHistoryConfirmationPresented = true
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                         }
                     }
                 }
@@ -378,13 +389,16 @@ private struct SettingsDetailView: View {
 
                 SettingsSection(theme: theme, title: "Shortcut") {
                     SettingsSimpleRow(title: "Press and hold") {
-                        Picker("Shortcut", selection: presetShortcutBinding) {
-                            ForEach(ShortcutPreset.allCases) { preset in
-                                Text(preset.label).tag(preset)
-                            }
+                        SettingsPopupButton(
+                            options: ShortcutPreset.allCases.map {
+                                SettingsPopupOption(id: $0.rawValue, title: $0.label)
+                            },
+                            selectedID: presetShortcutBinding.wrappedValue.rawValue,
+                            width: 220
+                        ) { selectedID in
+                            guard let preset = ShortcutPreset(rawValue: selectedID) else { return }
+                            presetShortcutBinding.wrappedValue = preset
                         }
-                        .labelsHidden()
-                        .frame(width: 220)
                     }
 
                     if appState.preferences.shortcut.triggerKey == .customShortcut || isCapturingShortcut {
@@ -408,39 +422,43 @@ private struct SettingsDetailView: View {
 
                 SettingsSection(theme: theme, title: "Microphone") {
                     SettingsSimpleRow(title: "Input") {
-                        Picker("Microphone", selection: microphoneSelectionBinding) {
-                            Text(systemDefaultMicrophoneLabel).tag(Optional<UInt32>.none)
-
-                            ForEach(appState.availableMicrophones, id: \.stableID) { microphone in
-                                Text(microphone.displayName).tag(Optional(microphone.stableID))
-                            }
+                        SettingsPopupButton(
+                            options: microphoneOptions,
+                            selectedID: selectedMicrophoneID,
+                            width: 260
+                        ) { selectedID in
+                            microphoneSelectionBinding.wrappedValue = microphoneID(from: selectedID)
                         }
-                        .labelsHidden()
-                        .frame(width: 260)
                     }
                 }
 
                 SettingsSection(theme: theme, title: "Appearance") {
                     SettingsSimpleRow(title: "Accent") {
-                        Picker("Color Scheme", selection: auraColorBinding) {
-                            ForEach(AuraColorOption.allCases) { option in
-                                AuraColorOptionLabel(option: option).tag(option)
-                            }
+                        SettingsPopupButton(
+                            options: AuraColorOption.allCases.map {
+                                SettingsPopupOption(id: $0.rawValue, title: $0.label)
+                            },
+                            selectedID: auraColorBinding.wrappedValue.rawValue,
+                            width: 220
+                        ) { selectedID in
+                            guard let option = AuraColorOption(rawValue: selectedID) else { return }
+                            auraColorBinding.wrappedValue = option
                         }
-                        .labelsHidden()
-                        .frame(width: 220)
                     }
 
                     SettingsRowDivider()
 
                     SettingsSimpleRow(title: "Mode") {
-                        Picker("Appearance", selection: appearanceBinding) {
-                            ForEach(AppAppearanceOption.allCases) { option in
-                                Text(option.label).tag(option)
-                            }
+                        SettingsPopupButton(
+                            options: AppAppearanceOption.allCases.map {
+                                SettingsPopupOption(id: $0.rawValue, title: $0.label)
+                            },
+                            selectedID: appearanceBinding.wrappedValue.rawValue,
+                            width: 220
+                        ) { selectedID in
+                            guard let option = AppAppearanceOption(rawValue: selectedID) else { return }
+                            appearanceBinding.wrappedValue = option
                         }
-                        .labelsHidden()
-                        .frame(width: 220)
                     }
                 }
 
@@ -451,22 +469,21 @@ private struct SettingsDetailView: View {
                             set: { appState.setLaunchAtLogin(enabled: $0) }
                         ))
                         .labelsHidden()
+                        .toggleStyle(SettingsCheckboxToggleStyle(theme: theme))
                     }
                 }
 
                 SettingsSection(theme: theme, title: "Tools") {
                     SettingsSimpleRow(title: "Setup Assistant") {
                         Button("Redo Setup", action: appState.presentSetupOverlay)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                     }
 
                     SettingsRowDivider()
 
                     SettingsSimpleRow(title: "Debug Transcriptions") {
                         Button("Open Folder", action: appState.openTranscriptionsFolder)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                     }
                 }
             }
@@ -488,6 +505,25 @@ private struct SettingsDetailView: View {
         }
 
         return "System Default (\(microphone.displayName))"
+    }
+
+    private var microphoneOptions: [SettingsPopupOption] {
+        [SettingsPopupOption(id: "system", title: systemDefaultMicrophoneLabel)]
+            + appState.availableMicrophones.map {
+                SettingsPopupOption(id: String($0.stableID), title: $0.displayName)
+            }
+    }
+
+    private var selectedMicrophoneID: String {
+        if let id = microphoneSelectionBinding.wrappedValue {
+            return String(id)
+        }
+
+        return "system"
+    }
+
+    private func microphoneID(from selectedID: String) -> UInt32? {
+        selectedID == "system" ? nil : UInt32(selectedID)
     }
 
     private var auraColorBinding: Binding<AuraColorOption> {
@@ -581,12 +617,16 @@ private struct SettingsInsetGroup<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(theme.cardFill(for: colorScheme))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(theme.cardBorder(for: colorScheme), lineWidth: 1)
-                )
+                .fill(cardFillColor)
         )
+    }
+
+    private var cardFillColor: Color {
+        if colorScheme == .dark {
+            return theme.cardFill(for: colorScheme)
+        }
+
+        return .white
     }
 }
 
@@ -607,6 +647,161 @@ private struct SettingsSimpleRow<Control: View>: View {
                 .frame(width: controlColumnWidth, alignment: .trailing)
         }
         .padding(.vertical, 12)
+    }
+}
+
+private struct SettingsFlatButtonStyle: ButtonStyle {
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(colorScheme == .dark ? .white.opacity(0.9) : .black.opacity(0.78))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(backgroundColor(pressed: configuration.isPressed))
+            )
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
+    }
+
+    private func backgroundColor(pressed: Bool) -> Color {
+        if colorScheme == .dark {
+            return pressed ? Color.white.opacity(0.12) : Color.white.opacity(0.08)
+        }
+
+        return pressed ? Color.black.opacity(0.08) : Color.black.opacity(0.05)
+    }
+}
+
+private struct SettingsCheckboxToggleStyle: ToggleStyle {
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(boxFillColor)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(checkmarkColor)
+                        .opacity(configuration.isOn ? 1 : 0)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(configuration.isOn ? "Enabled" : "Disabled")
+    }
+
+    private var boxFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+    }
+
+    private var checkmarkColor: Color {
+        colorScheme == .dark ? .white.opacity(0.88) : .black.opacity(0.78)
+    }
+}
+
+private struct SettingsFlatFieldModifier: ViewModifier {
+    let theme: AuraTheme
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+            )
+    }
+}
+
+private struct SettingsPopupOption: Identifiable, Equatable {
+    let id: String
+    let title: String
+}
+
+private struct SettingsPopupButton: NSViewRepresentable {
+    let options: [SettingsPopupOption]
+    let selectedID: String
+    let width: CGFloat
+    let onChange: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onChange: onChange)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectionDidChange(_:))
+        button.controlSize = .small
+        button.bezelStyle = .rounded
+        button.contentTintColor = .labelColor
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.onChange = onChange
+
+        let currentOptionIDs = button.itemArray.compactMap { $0.representedObject as? String }
+        let nextOptionIDs = options.map(\.id)
+
+        if currentOptionIDs != nextOptionIDs {
+            button.removeAllItems()
+            for option in options {
+                let item = NSMenuItem(title: option.title, action: nil, keyEquivalent: "")
+                item.representedObject = option.id
+                button.menu?.addItem(item)
+            }
+        }
+
+        if let item = button.itemArray.first(where: { ($0.representedObject as? String) == selectedID }) {
+            button.select(item)
+        }
+
+        if let widthConstraint = button.constraints.first(where: { $0.firstAttribute == .width }) {
+            widthConstraint.constant = width
+        } else {
+            button.widthAnchor.constraint(equalToConstant: width).isActive = true
+        }
+
+        if let cell = button.cell as? NSPopUpButtonCell {
+            cell.controlSize = .regular
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var onChange: (String) -> Void
+
+        init(onChange: @escaping (String) -> Void) {
+            self.onChange = onChange
+        }
+
+        @objc func selectionDidChange(_ sender: NSPopUpButton) {
+            guard let selectedID = sender.selectedItem?.representedObject as? String else { return }
+            onChange(selectedID)
+        }
+    }
+}
+
+private extension View {
+    func settingsFlatField(theme: AuraTheme) -> some View {
+        modifier(SettingsFlatFieldModifier(theme: theme))
     }
 }
 
@@ -778,9 +973,7 @@ struct VoiceResponseHistoryHomeCard: View {
             } else {
                 ForEach(sections) { section in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(section.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .padding(.leading, 2)
+                        SettingsSectionEyebrow(section.title)
 
                         VoiceResponseHistoryDaySectionCard(
                             section: section,
@@ -1034,7 +1227,7 @@ private struct SetupFlowOverlay: View {
             )
                 .frame(maxWidth: 560)
                 .shadow(
-                    color: theme.shadow.color.opacity(colorScheme == .dark ? 0.30 : 0.18),
+                    color: theme.shadow.color.opacity(colorScheme == .dark ? 0.05 : 0.18),
                     radius: 28,
                     x: 0,
                     y: 18
@@ -1135,22 +1328,23 @@ struct SetupFlowCard: View {
     let canDismiss: Bool
     let onDismiss: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        SettingsCard(theme: theme, contentPadding: 24) {
-            VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Let's get you set up")
+                    .font(.system(size: 28, weight: .semibold))
+
+                Text("Aura needs a few permissions and dependencies before it can start listening")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Let's get you set up")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-
-                    Text("Aura needs a few permissions and model files before it can start listening from the menu bar.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }.padding(.vertical, 10)
-
-                VStack(alignment: .leading, spacing: 14) {
                     SetupPermissionRow(
-                        icon: "mic.fill",
                         title: "Microphone Access",
                         message: "Allows Aura to capture audio directly from your selected microphone.",
                         status: appState.permissionState.microphone,
@@ -1162,7 +1356,6 @@ struct SetupFlowCard: View {
                     )
 
                     SetupPermissionRow(
-                        icon: "figure.wave.circle.fill",
                         title: "Accessibility Access",
                         message: "Allows Aura to insert the transcript into the app where your cursor is currently focused.",
                         status: appState.permissionState.accessibility,
@@ -1174,7 +1367,6 @@ struct SetupFlowCard: View {
                     )
 
                     SetupPermissionRow(
-                        icon: "keyboard",
                         title: "Input Monitoring",
                         message: "Allows Aura to detect your shortcut while you are working in other apps.",
                         status: appState.permissionState.inputMonitoring,
@@ -1184,23 +1376,30 @@ struct SetupFlowCard: View {
                         secondaryTitle: "Open System Settings",
                         theme: theme
                     )
+                }
 
+                VStack(alignment: .leading, spacing: 10) {
                     SetupModelDownloadSection(
                         state: appState.whisperModelSetupState,
                         retryAction: appState.retryWhisperModelDownload,
                         theme: theme
                     )
                 }
+            }
 
-                HStack(spacing: 8) {
-                    Spacer()
-                    if canDismiss {
-                        Button("Continue", action: onDismiss)
-                            .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
-                    }
+            HStack(spacing: 8) {
+                Spacer()
+                if canDismiss {
+                    Button("Continue", action: onDismiss)
+                        .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                 }
             }
         }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(colorScheme == .dark ? theme.cardFill(for: colorScheme) : Color.white)
+        )
     }
 }
 
@@ -1317,7 +1516,6 @@ struct SettingsPrimaryButtonStyle: ButtonStyle {
 }
 
 struct SetupPermissionRow: View {
-    let icon: String
     let title: String
     let message: String
     let status: PermissionAuthorization
@@ -1332,16 +1530,6 @@ struct SetupPermissionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(theme.accentStrong.color.opacity(colorScheme == .dark ? 0.20 : 0.12))
-
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(theme.accentStrong.color)
-                }
-                .frame(width: 36, height: 36)
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
@@ -1360,10 +1548,10 @@ struct SetupPermissionRow: View {
             if status != .granted {
                 HStack(spacing: 10) {
                     Button(primaryTitle, action: primaryAction)
-                        .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
+                        .buttonStyle(SettingsFlatButtonStyle(theme: theme))
 
                     Button(secondaryTitle, action: secondaryAction)
-                        .buttonStyle(SettingsReflectiveButtonStyle(theme: theme))
+                        .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                 }
             }
         }
@@ -1371,11 +1559,7 @@ struct SetupPermissionRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(theme.historyRowFill(for: colorScheme))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(theme.historyRowBorder(for: colorScheme), lineWidth: 1)
-                )
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
         )
     }
 }
@@ -1405,7 +1589,7 @@ struct SetupModelDownloadSection: View {
                             modelErrorMessage(message)
 
                             Button("Retry Download", action: retryAction)
-                                .buttonStyle(SettingsPrimaryButtonStyle(theme: theme))
+                                .buttonStyle(SettingsFlatButtonStyle(theme: theme))
                         }
                     }
 
@@ -1417,19 +1601,19 @@ struct SetupModelDownloadSection: View {
                 switch state {
                 case .checking:
                     ProgressView(value: 0, total: 1)
-                        .tint(theme.accentStrong.color)
+                        .tint(Color.gray)
                 case .preparing:
                     ProgressView(value: 0, total: 1)
-                        .tint(theme.accentStrong.color)
+                        .tint(Color.gray)
                 case .downloading(let progress, _):
                     ProgressView(value: progress, total: 1)
-                        .tint(theme.accentStrong.color)
+                        .tint(Color.gray)
                 case .installed:
                     ProgressView(value: 1, total: 1)
-                        .tint(theme.accentStrong.color)
+                        .tint(Color.gray)
                 case .failed:
                     ProgressView(value: 0, total: 1)
-                        .tint(theme.accentStrong.color)
+                        .tint(Color.gray)
                 }
             }
         }
@@ -1438,10 +1622,6 @@ struct SetupModelDownloadSection: View {
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(modelCardFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(modelCardBorder, lineWidth: 1)
-                )
         )
     }
 
@@ -1465,11 +1645,7 @@ struct SetupModelDownloadSection: View {
     }
 
     private var modelCardFill: Color {
-        theme.historyRowFill(for: colorScheme)
-    }
-
-    private var modelCardBorder: Color {
-        theme.historyRowBorder(for: colorScheme)
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035)
     }
 
     private var messageColor: Color {
