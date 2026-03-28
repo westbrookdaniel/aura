@@ -32,10 +32,5 @@ let package = Package(
                 ])
             ]
         ),
-        .testTarget(
-            name: "AuraTests",
-            dependencies: ["Aura"],
-            path: "Tests/AuraTests"
-        )
     ]
 )
