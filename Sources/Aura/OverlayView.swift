@@ -123,7 +123,7 @@ struct RecorderOverlayView: View {
                         colors: [
                             theme.overlay.radialInner.color.opacity(metrics.outerOpacity),
                             theme.overlay.radialMiddle.color.opacity(metrics.innerOpacity),
-                            theme.overlay.radialOuter.color.opacity(isProcessing ? 0.18 : 0.08)
+                            theme.overlay.radialOuter.color.opacity(isProcessing ? 0.18 : 0.08),
                         ],
                         center: .center,
                         startRadius: 16,
@@ -132,7 +132,9 @@ struct RecorderOverlayView: View {
                 )
                 .frame(width: metrics.outerSize.width, height: metrics.outerSize.height)
                 .blur(radius: metrics.outerBlur)
-                .shadow(color: auraShadowColor(isProcessing: isProcessing), radius: isProcessing ? 22 : 34, y: isProcessing ? 0 : -4)
+                .shadow(
+                    color: auraShadowColor(isProcessing: isProcessing),
+                    radius: isProcessing ? 22 : 34, y: isProcessing ? 0 : -4)
 
             Ellipse()
                 .fill(
@@ -140,7 +142,7 @@ struct RecorderOverlayView: View {
                         colors: [
                             theme.overlay.baseInner.color.opacity(metrics.outerOpacity),
                             theme.overlay.baseOuter.color.opacity(isProcessing ? 0.74 : 0.40),
-                            .clear
+                            .clear,
                         ],
                         startPoint: .bottom,
                         endPoint: .top
