@@ -140,6 +140,9 @@ if git -C "${ROOT_DIR}" rev-parse --verify --quiet "refs/tags/${TAG_NAME}" >/dev
     exit 1
 fi
 
+echo "Running tests..."
+swift test --package-path "${ROOT_DIR}"
+
 BUILD_CMD=(
     "${ROOT_DIR}/scripts/build-app.sh"
     "--version" "${VERSION}"

@@ -22,7 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appState = AuraAppHolder.shared.appState
         statusController = StatusItemController(appState: appState)
         appState.start()
-        appState.openSettingsWindow()
+
+        if appState.requiresSetup {
+            appState.openSettingsWindow()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

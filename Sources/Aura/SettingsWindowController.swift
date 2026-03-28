@@ -5,6 +5,7 @@ import SwiftUI
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
     private static let windowSize = NSSize(width: 980, height: 760)
+    private static let frameAutosaveName = "AuraSettingsWindow"
 
     private init() {
         let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
@@ -13,7 +14,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        Self.configureFrame(for: window)
+        window.setFrameAutosaveName(Self.frameAutosaveName)
+        if window.setFrameUsingName(Self.frameAutosaveName) == false {
+            Self.configureInitialFrame(for: window)
+        }
         super.init(window: window)
         window.delegate = self
     }
@@ -30,9 +34,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: AnyView(rootView))
         contentViewController = hostingController
         updateAppearance(appState.preferences.appearance.nsAppearance)
-        if let window {
-            Self.configureFrame(for: window)
-        }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -46,7 +47,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.orderOut(nil)
     }
 
-    private static func configureFrame(for window: NSWindow) {
+    private static func configureInitialFrame(for window: NSWindow) {
         window.setContentSize(Self.windowSize)
 
         guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else {

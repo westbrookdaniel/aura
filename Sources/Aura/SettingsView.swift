@@ -450,11 +450,10 @@ private struct SettingsDetailView: View {
                             description: "Press Escape while recording if you want to cancel the capture."
                         ) {
                             VStack(alignment: .trailing, spacing: 10) {
-                                SettingsValueBadge(text: appState.preferences.shortcut.displayName)
+                                SettingsValueBadge(text: customShortcutDisplayName)
 
                                 ShortcutCaptureButton(
                                     isCapturing: $isCapturingShortcut,
-                                    currentTitle: appState.preferences.shortcut.displayName,
                                     theme: theme
                                 ) { shortcut in
                                     appState.updateShortcut(shortcut)
@@ -610,12 +609,17 @@ private struct SettingsDetailView: View {
                     appState.updateShortcut(.rightOption)
                 case .custom:
                     isCapturingShortcut = true
-                    if appState.preferences.shortcut.triggerKey != .customShortcut {
-                        appState.updateShortcut(.custom(keyCode: 0, modifiers: [], keyDisplay: "Not Set"))
-                    }
                 }
             }
         )
+    }
+
+    private var customShortcutDisplayName: String {
+        if appState.preferences.shortcut.triggerKey == .customShortcut {
+            return appState.preferences.shortcut.displayName
+        }
+
+        return "Not Set"
     }
 
 }
@@ -1285,7 +1289,7 @@ struct SetupFlowCard: View {
                     Text("Let's get you set up")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
 
-                    Text("We needs permissions and some dependencies before we can start.")
+                    Text("Aura needs a few permissions and model files before it can start listening from the menu bar.")
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1307,10 +1311,22 @@ struct SetupFlowCard: View {
                     SetupPermissionRow(
                         icon: "figure.wave.circle.fill",
                         title: "Accessibility Access",
-                        message: "Lets Aura insert the transcript into the app where your cursor is currently focused.",
+                        message: "Allows Aura to insert the transcript into the app where your cursor is currently focused.",
                         status: appState.permissionState.accessibility,
                         primaryAction: { appState.requestAccessibilityPermission() },
                         secondaryAction: { appState.openAccessibilitySettings() },
+                        primaryTitle: "Prompt for Access",
+                        secondaryTitle: "Open System Settings",
+                        theme: theme
+                    )
+
+                    SetupPermissionRow(
+                        icon: "keyboard",
+                        title: "Input Monitoring",
+                        message: "Allows Aura to detect your shortcut while you are working in other apps.",
+                        status: appState.permissionState.inputMonitoring,
+                        primaryAction: { appState.requestInputMonitoringPermission() },
+                        secondaryAction: { appState.openInputMonitoringSettings() },
                         primaryTitle: "Prompt for Access",
                         secondaryTitle: "Open System Settings",
                         theme: theme
@@ -1748,7 +1764,6 @@ struct PermissionStatusBadge: View {
 
 struct ShortcutCaptureButton: NSViewRepresentable {
     @Binding var isCapturing: Bool
-    let currentTitle: String
     let theme: AuraTheme
     let onCapture: (ShortcutSpec) -> Void
 

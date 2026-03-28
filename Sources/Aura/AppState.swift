@@ -145,6 +145,10 @@ final class AppState: ObservableObject {
         permissionsManager.openMicrophoneSettings()
     }
 
+    func openInputMonitoringSettings() {
+        permissionsManager.openInputMonitoringSettings()
+    }
+
     func requestAccessibilityPermission() {
         permissionsManager.requestAccessibilityAccess()
         refreshPermissions()
@@ -533,6 +537,7 @@ final class AppState: ObservableObject {
     var hasRequiredPermissions: Bool {
         permissionState.microphone == .granted
             && permissionState.accessibility == .granted
+            && permissionState.inputMonitoring == .granted
     }
 
     var isWhisperModelReady: Bool {
